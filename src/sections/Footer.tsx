@@ -26,25 +26,25 @@ export default function Footer() {
         }}
       >
         <OfficeColumn
-          city="Amalfi Coast"
-          cityEn="ITALY"
-          address="Via Lunamare 12, Positano, 84017 SA"
-          coords="40.6280\u00b0 N, 14.4847\u00b0 E"
-          timezone="UTC+1"
+          city="Sales Gallery"
+          cityEn="VISIT US"
+          address="100 Seaside Drive — follow the entrance signs to the model home"
+          coords="Open daily, 10am – 5pm"
+          timezone="Sundays by appointment"
         />
         <OfficeColumn
-          city="Malibu"
-          cityEn="CALIFORNIA"
-          address="27400 Pacific Coast Highway, Malibu, CA 90265"
-          coords="34.0259\u00b0 N, 118.7798\u00b0 W"
-          timezone="UTC-8"
+          city="The Community"
+          cityEn="SEASIDE ESTATES"
+          address="A gated coastal subdivision — 24 homesites across three phases"
+          coords="Phase I & II now selling"
+          timezone="Phase III coming soon"
         />
         <OfficeColumn
-          city="Phuket"
-          cityEn="THAILAND"
-          address="88 Tri-Trang Beach Road, Patong, Phuket 83150"
-          coords="7.8804\u00b0 N, 98.2953\u00b0 E"
-          timezone="UTC+7"
+          city="Schedule a Tour"
+          cityEn="PRIVATE SHOWINGS"
+          address="Walk the lots, tour the model home, and see the amenities with our sales team"
+          coords="Golf cart tours available"
+          timezone="Book via the inquiry form above"
         />
         <div>
           <p
@@ -59,11 +59,11 @@ export default function Footer() {
             CONTACT
           </p>
           <p style={{ fontSize: '14px', color: '#666666', lineHeight: 2 }}>
-            reservations@lunamare.com
+            sales@seasideestates.com
             <br />
-            +1 (310) 555 0123
+            +1 (555) 010-0123
             <br />
-            Instagram: @lunamare.hotels
+            Instagram: @seasideestates
           </p>
         </div>
       </div>
@@ -89,7 +89,7 @@ export default function Footer() {
             userSelect: 'none',
           }}
         >
-          LUNAMARE
+          SEASIDE
         </span>
       </div>
     </footer>

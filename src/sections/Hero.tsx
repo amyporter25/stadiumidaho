@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
+import { lots } from '../data/lots'
 
 const vertexShader = `
 varying vec2 vUv;
@@ -60,12 +61,11 @@ export default function Hero() {
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    checkin: '',
-    checkout: '',
-    guests: '2',
-    roomType: 'Any room',
     name: '',
     email: '',
+    phone: '',
+    lotTitle: 'No specific lot yet',
+    timeframe: 'Just browsing',
     message: '',
   })
 
@@ -82,7 +82,7 @@ export default function Hero() {
     }
   }, [user])
 
-  const createReservation = trpc.reservation.create.useMutation({
+  const createInquiry = trpc.inquiry.create.useMutation({
     onSuccess: () => {
       setSubmitted(true)
       setSubmitError(null)
@@ -156,18 +156,18 @@ export default function Hero() {
     e.preventDefault()
     setSubmitError(null)
 
-    if (!formData.checkin || !formData.checkout || !formData.name || !formData.email) {
-      setSubmitError('Please fill in all required fields.')
+    if (!formData.name || !formData.email) {
+      setSubmitError('Please fill in your name and email.')
       return
     }
 
-    createReservation.mutate({
-      checkInDate: formData.checkin,
-      checkOutDate: formData.checkout,
-      guests: formData.guests,
-      roomType: formData.roomType,
+    createInquiry.mutate({
       fullName: formData.name,
       email: formData.email,
+      phone: formData.phone || undefined,
+      interest: 'General Inquiry',
+      lotTitle: formData.lotTitle === 'No specific lot yet' ? undefined : formData.lotTitle,
+      timeframe: formData.timeframe,
       message: formData.message || undefined,
       userId: user?.id,
     })
@@ -227,9 +227,9 @@ export default function Hero() {
               maxWidth: '520px',
             }}
           >
-            Plan your
+            Find your
             <br />
-            coastal stay
+            homesite
           </h2>
           <p
             style={{
@@ -239,7 +239,7 @@ export default function Hero() {
               textTransform: 'uppercase',
             }}
           >
-            LUNAMARE · Reservations & Inquiries
+            SEASIDE ESTATES · Sales & Inquiries
           </p>
         </div>
       </div>
@@ -276,7 +276,7 @@ export default function Hero() {
               marginBottom: '36px',
             }}
           >
-            Reserve a room or send us a note.
+            Schedule a tour or send us a note.
           </h3>
 
           {submitted ? (
@@ -289,8 +289,8 @@ export default function Hero() {
                 color: 'rgba(255,255,255,0.85)',
               }}
             >
-              Thank you — our reservations team will be in touch within 24
-              hours. A confirmation has been sent to your email.
+              Thank you — our sales team will be in touch within one business
+              day to answer your questions or arrange your visit.
             </div>
           ) : (
             <form
@@ -316,39 +316,42 @@ export default function Hero() {
                 </div>
               )}
               <Row>
-                <Field label="Check-in" type="date" name="checkin" value={formData.checkin} onChange={handleChange} />
-                <Field label="Check-out" type="date" name="checkout" value={formData.checkout} onChange={handleChange} />
+                <Field label="Full name" type="text" name="name" placeholder="Jane Doe" value={formData.name} onChange={handleChange} />
+                <Field label="Phone (optional)" type="tel" name="phone" placeholder="(555) 000-0000" value={formData.phone} onChange={handleChange} />
               </Row>
+              <Field label="Email" type="email" name="email" placeholder="you@domain.com" value={formData.email} onChange={handleChange} />
               <Row>
-                <Field label="Guests" type="number" name="guests" placeholder="2" min={1} value={formData.guests} onChange={handleChange} />
                 <SelectField
-                  label="Room type"
-                  name="roomType"
-                  value={formData.roomType}
+                  label="Lot of interest"
+                  name="lotTitle"
+                  value={formData.lotTitle}
+                  onChange={handleChange}
+                  options={['No specific lot yet', ...lots.map((l) => l.title)]}
+                />
+                <SelectField
+                  label="Purchase timeframe"
+                  name="timeframe"
+                  value={formData.timeframe}
                   onChange={handleChange}
                   options={[
-                    'Any room',
-                    'Ocean Suite',
-                    'Private Villa',
-                    'Horizon Loft',
-                    'Beachfront Studio',
-                    'Cliffside Suite',
-                    'Seaview Villa',
+                    'Just browsing',
+                    'Within 3 months',
+                    '3–6 months',
+                    '6–12 months',
+                    'More than a year',
                   ]}
                 />
               </Row>
-              <Field label="Full name" type="text" name="name" placeholder="Jane Doe" value={formData.name} onChange={handleChange} />
-              <Field label="Email" type="email" name="email" placeholder="you@domain.com" value={formData.email} onChange={handleChange} />
               <TextareaField
                 label="Message (optional)"
                 name="message"
-                placeholder="Occasion, dietary preferences, arrival needs…"
+                placeholder="Questions about a lot, building requirements, financing…"
                 value={formData.message}
                 onChange={handleChange}
               />
               <button
                 type="submit"
-                disabled={createReservation.isPending}
+                disabled={createInquiry.isPending}
                 onMouseEnter={() => setSubmitHovered(true)}
                 onMouseLeave={() => setSubmitHovered(false)}
                 style={{
@@ -360,14 +363,14 @@ export default function Hero() {
                   color: submitHovered ? '#0b0b0b' : '#ffffff',
                   backgroundColor: submitHovered ? '#ffffff' : 'transparent',
                   border: '1px solid #ffffff',
-                  cursor: createReservation.isPending ? 'wait' : 'pointer',
+                  cursor: createInquiry.isPending ? 'wait' : 'pointer',
                   textTransform: 'uppercase',
                   transition: 'all 0.25s ease',
                   fontFamily: '"Helvetica Neue", sans-serif',
-                  opacity: createReservation.isPending ? 0.6 : 1,
+                  opacity: createInquiry.isPending ? 0.6 : 1,
                 }}
               >
-                {createReservation.isPending ? 'Submitting...' : 'Submit Inquiry'}
+                {createInquiry.isPending ? 'Submitting...' : 'Submit Inquiry'}
               </button>
             </form>
           )}

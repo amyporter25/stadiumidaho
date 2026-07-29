@@ -1,25 +1,25 @@
 import { useEffect, useRef, useCallback } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { rooms, type Room } from '../data/rooms'
+import { lots, type Lot } from '../data/lots'
 
 gsap.registerPlugin(ScrollTrigger)
 
 interface WorksProps {
   scrollRef: React.MutableRefObject<{ y: number; speed: number }>
-  onSelectRoom: (id: string) => void
+  onSelectLot: (id: string) => void
 }
 
-export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProps) {
+export default function Works({ scrollRef: _scrollRef, onSelectLot }: WorksProps) {
   const sectionRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([])
-  const imageLoadedRef = useRef<boolean[]>(new Array(rooms.length).fill(false))
-  const imagesRef = useRef<(HTMLImageElement | null)[]>(new Array(rooms.length).fill(null))
+  const imageLoadedRef = useRef<boolean[]>(new Array(lots.length).fill(false))
+  const imagesRef = useRef<(HTMLImageElement | null)[]>(new Array(lots.length).fill(null))
   const strengthRef = useRef(0)
   const prevScrollYRef = useRef(0)
   const randsRef = useRef<number[][]>(
-    rooms.map(() => [Math.random(), Math.random(), Math.random(), Math.random()])
+    lots.map(() => [Math.random(), Math.random(), Math.random(), Math.random()])
   )
 
   const setCanvasRef = useCallback((el: HTMLCanvasElement | null, index: number) => {
@@ -49,7 +49,7 @@ export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProp
   }, [])
 
   useEffect(() => {
-    rooms.forEach((room, i) => {
+    lots.forEach((lot, i) => {
       const img = new Image()
       img.crossOrigin = 'anonymous'
       img.onload = () => {
@@ -65,7 +65,7 @@ export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProp
           drawImage(canvas, img, 0, randsRef.current[i])
         }
       }
-      img.src = room.img
+      img.src = lot.img
     })
   }, [])
 
@@ -144,7 +144,7 @@ export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProp
               color: '#000000',
             }}
           >
-            Rooms &amp; Residences
+            Homesites &amp; Lots
           </h2>
           <span
             style={{
@@ -154,7 +154,7 @@ export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProp
               textTransform: 'uppercase',
             }}
           >
-            Featured Stays
+            Current Inventory
           </span>
         </div>
 
@@ -166,13 +166,13 @@ export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProp
             gap: '2px',
           }}
         >
-          {rooms.map((room, i) => (
-            <RoomCard
-              key={room.id}
-              room={room}
+          {lots.map((lot, i) => (
+            <LotCard
+              key={lot.id}
+              lot={lot}
               index={i}
               setCanvasRef={setCanvasRef}
-              onClick={() => onSelectRoom(room.id)}
+              onClick={() => onSelectLot(lot.id)}
             />
           ))}
         </div>
@@ -181,17 +181,31 @@ export default function Works({ scrollRef: _scrollRef, onSelectRoom }: WorksProp
   )
 }
 
-function RoomCard({
-  room,
+function statusColors(status: Lot['status']): { fg: string; bg: string; border: string } {
+  switch (status) {
+    case 'Available':
+      return { fg: '#1a6b3a', bg: '#e8f5e9', border: '#1a6b3a' }
+    case 'Under Contract':
+      return { fg: '#8a5a00', bg: '#fdf3e0', border: '#8a5a00' }
+    case 'Sold':
+      return { fg: '#8a1a1a', bg: '#fbeaea', border: '#8a1a1a' }
+    case 'Coming Soon':
+      return { fg: '#1a4a8a', bg: '#e8f0fb', border: '#1a4a8a' }
+  }
+}
+
+function LotCard({
+  lot,
   index,
   setCanvasRef,
   onClick,
 }: {
-  room: Room
+  lot: Lot
   index: number
   setCanvasRef: (el: HTMLCanvasElement | null, index: number) => void
   onClick: () => void
 }) {
+  const status = statusColors(lot.status)
   return (
     <button
       onClick={onClick}
@@ -226,6 +240,24 @@ function RoomCard({
             display: 'block',
           }}
         />
+        <span
+          style={{
+            position: 'absolute',
+            top: '14px',
+            left: '14px',
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: status.fg,
+            backgroundColor: status.bg,
+            border: `1px solid ${status.border}`,
+            padding: '6px 12px',
+            zIndex: 2,
+          }}
+        >
+          {lot.status}
+        </span>
       </div>
       <div
         style={{
@@ -247,7 +279,7 @@ function RoomCard({
               marginBottom: '6px',
             }}
           >
-            {room.id} · {room.client}
+            Lot {lot.id} · {lot.phase} · {lot.type}
           </p>
           <p
             style={{
@@ -258,7 +290,7 @@ function RoomCard({
               lineHeight: 1.3,
             }}
           >
-            {room.title}
+            {lot.title}
           </p>
         </div>
         <span

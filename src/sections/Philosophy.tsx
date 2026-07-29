@@ -4,7 +4,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const tags = ['Coastal', 'Slow Living', 'Timeless']
+const tags = ['Gated', 'Oceanfront', 'Now Selling']
 
 export default function Philosophy() {
   const sectionRef = useRef<HTMLElement>(null)
@@ -49,6 +49,7 @@ export default function Philosophy() {
 
   return (
     <section
+      id="community"
       ref={sectionRef}
       style={{
         backgroundColor: '#ffffff',
@@ -77,8 +78,8 @@ export default function Philosophy() {
             maxWidth: '1200px',
           }}
         >
-          We believe a true retreat is not measured in amenities, but in the
-          quiet moments a place gives back to you.
+          We believe a homesite is more than a parcel of land — it’s the
+          ground your life will be built on.
         </p>
 
         <div

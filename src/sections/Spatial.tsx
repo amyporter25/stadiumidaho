@@ -97,7 +97,7 @@ export default function Spatial() {
             textTransform: 'uppercase',
           }}
         >
-          Luxury Seaside Retreat · Est. 1998
+          A Coastal Residential Community · Now Selling
         </span>
 
         <h1
@@ -111,9 +111,9 @@ export default function Spatial() {
             textShadow: '0 2px 24px rgba(0,0,0,0.25)',
           }}
         >
-          Where the Sea
+          Where the Coast
           <br />
-          Meets Stillness
+          Becomes Home
         </h1>
 
         <p
@@ -125,15 +125,15 @@ export default function Spatial() {
             maxWidth: '520px',
           }}
         >
-          Nestled along a secluded stretch of coastline, LUNAMARE offers suites,
-          villas, and residences shaped by salt air, open horizons, and
-          unhurried time — a sanctuary for travelers who measure days by the
-          tide.
+          Seaside Estates is a gated coastal subdivision of 24 homesites set
+          along a quiet stretch of shoreline — some offered as build-ready
+          vacant lots, others with completed or under-construction homes.
+          Every lot is a short walk from the water.
         </p>
 
         <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
           <button
-            onClick={() => document.querySelector('#hero')?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() => document.querySelector('#works')?.scrollIntoView({ behavior: 'smooth' })}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{
@@ -150,9 +150,10 @@ export default function Spatial() {
               fontFamily: '"Helvetica Neue", sans-serif',
             }}
           >
-            Reserve Your Stay
+            Browse Available Lots
           </button>
           <button
+            onClick={() => document.querySelector('#community')?.scrollIntoView({ behavior: 'smooth' })}
             style={{
               fontSize: '13px',
               fontWeight: 500,
@@ -168,7 +169,7 @@ export default function Spatial() {
               textUnderlineOffset: '6px',
             }}
           >
-            Explore Rooms →
+            Our Community Story →
           </button>
         </div>
       </div>

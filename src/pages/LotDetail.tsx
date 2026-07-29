@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { rooms } from '../data/rooms'
+import { lots, type Lot } from '../data/lots'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 
-interface RoomDetailProps {
-  roomId: string
+interface LotDetailProps {
+  lotId: string
   onBack: () => void
 }
 
@@ -24,62 +24,71 @@ function getOAuthUrl() {
   return url.toString()
 }
 
-export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
-  const room = rooms.find((r) => r.id === roomId)
+function statusColors(status: Lot['status']): { fg: string; bg: string; border: string } {
+  switch (status) {
+    case 'Available':
+      return { fg: '#1a6b3a', bg: '#e8f5e9', border: '#1a6b3a' }
+    case 'Under Contract':
+      return { fg: '#8a5a00', bg: '#fdf3e0', border: '#8a5a00' }
+    case 'Sold':
+      return { fg: '#8a1a1a', bg: '#fbeaea', border: '#8a1a1a' }
+    case 'Coming Soon':
+      return { fg: '#1a4a8a', bg: '#e8f0fb', border: '#1a4a8a' }
+  }
+}
+
+export default function LotDetail({ lotId, onBack }: LotDetailProps) {
+  const lot = lots.find((l) => l.id === lotId)
   const [hovered, setHovered] = useState(false)
-  const [reserveStatus, setReserveStatus] = useState<'idle' | 'reserved'>('idle')
+  const [inquiryStatus, setInquiryStatus] = useState<'idle' | 'sent'>('idle')
   const { user, isLoading: authLoading } = useAuth()
 
-  const createReservation = trpc.reservation.create.useMutation({
+  const createInquiry = trpc.inquiry.create.useMutation({
     onSuccess: () => {
-      setReserveStatus('reserved')
+      setInquiryStatus('sent')
     },
   })
 
-  const handleReserve = () => {
-    if (!room) return
+  const handleInquire = () => {
+    if (!lot) return
     if (!user) {
-      // Store intended reservation in sessionStorage, redirect to login
-      sessionStorage.setItem('pending_reservation_room_id', room.id)
-      sessionStorage.setItem('pending_reservation_room_title', room.title)
+      // Store intended inquiry in sessionStorage, redirect to login
+      sessionStorage.setItem('pending_inquiry_lot_id', lot.id)
+      sessionStorage.setItem('pending_inquiry_lot_title', lot.title)
       window.location.href = getOAuthUrl()
       return
     }
-    createReservation.mutate({
-      checkInDate: '',
-      checkOutDate: '',
-      guests: '2',
-      roomType: room.title,
-      roomId: room.id,
+    createInquiry.mutate({
       fullName: user.name || '',
       email: user.email || '',
+      interest: 'Lot Inquiry',
+      lotId: lot.id,
+      lotTitle: lot.title,
     })
   }
 
-  // Check for pending reservation after OAuth redirect
+  // Check for pending inquiry after OAuth redirect
   useEffect(() => {
-    const pendingRoomId = sessionStorage.getItem('pending_reservation_room_id')
-    const pendingRoomTitle = sessionStorage.getItem('pending_reservation_room_title')
-    if (pendingRoomId && pendingRoomTitle && user && roomId === pendingRoomId) {
-      sessionStorage.removeItem('pending_reservation_room_id')
-      sessionStorage.removeItem('pending_reservation_room_title')
-      createReservation.mutate({
-        checkInDate: '',
-        checkOutDate: '',
-        guests: '2',
-        roomType: pendingRoomTitle,
-        roomId: pendingRoomId,
+    const pendingLotId = sessionStorage.getItem('pending_inquiry_lot_id')
+    const pendingLotTitle = sessionStorage.getItem('pending_inquiry_lot_title')
+    if (pendingLotId && pendingLotTitle && user && lotId === pendingLotId) {
+      sessionStorage.removeItem('pending_inquiry_lot_id')
+      sessionStorage.removeItem('pending_inquiry_lot_title')
+      createInquiry.mutate({
         fullName: user.name || '',
         email: user.email || '',
+        interest: 'Lot Inquiry',
+        lotId: pendingLotId,
+        lotTitle: pendingLotTitle,
       })
     }
-  }, [user, roomId])
+  }, [user, lotId])
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' })
-  }, [roomId])
+  }, [lotId])
 
-  if (!room) {
+  if (!lot) {
     return (
       <div
         style={{
@@ -93,7 +102,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
           gap: '20px',
         }}
       >
-        <p style={{ fontSize: '20px' }}>Room not found.</p>
+        <p style={{ fontSize: '20px' }}>Lot not found.</p>
         <button
           onClick={onBack}
           style={{
@@ -106,11 +115,13 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
             textTransform: 'uppercase',
           }}
         >
-          ← Back to rooms
+          ← Back to lots
         </button>
       </div>
     )
   }
+
+  const status = statusColors(lot.status)
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh' }}>
@@ -125,8 +136,8 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
         }}
       >
         <img
-          src={room.img}
-          alt={room.title}
+          src={lot.img}
+          alt={lot.title}
           style={{
             position: 'absolute',
             inset: 0,
@@ -182,7 +193,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
               marginBottom: '12px',
             }}
           >
-            Room {room.id} · {room.client}
+            Lot {lot.id} · {lot.phase} · {lot.type}
           </p>
           <h1
             style={{
@@ -194,7 +205,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
               maxWidth: '900px',
             }}
           >
-            {room.title}
+            {lot.title}
           </h1>
         </div>
       </div>
@@ -224,10 +235,10 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
               maxWidth: '680px',
             }}
           >
-            {room.tagline}
+            {lot.tagline}
           </p>
 
-          {room.description.map((p, i) => (
+          {lot.description.map((p, i) => (
             <p
               key={i}
               style={{
@@ -258,7 +269,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
                 marginBottom: '28px',
               }}
             >
-              Room Features
+              Lot Highlights
             </p>
             <ul
               style={{
@@ -270,7 +281,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
                 gap: '14px 40px',
               }}
             >
-              {room.features.map((f) => (
+              {lot.features.map((f) => (
                 <li
                   key={f}
                   style={{
@@ -298,7 +309,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
           </div>
         </div>
 
-        {/* Right: booking panel */}
+        {/* Right: pricing panel */}
         <aside
           style={{
             flex: '1 1 320px',
@@ -310,17 +321,40 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
             backgroundColor: '#ffffff',
           }}
         >
-          <p
+          <div
             style={{
-              fontSize: '11px',
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              color: '#666666',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               marginBottom: '12px',
             }}
           >
-            From
-          </p>
+            <p
+              style={{
+                fontSize: '11px',
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                color: '#666666',
+                margin: 0,
+              }}
+            >
+              {lot.status === 'Sold' ? 'Last list price' : 'List price'}
+            </p>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 600,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: status.fg,
+                backgroundColor: status.bg,
+                border: `1px solid ${status.border}`,
+                padding: '5px 10px',
+              }}
+            >
+              {lot.status}
+            </span>
+          </div>
           <p
             style={{
               fontSize: 'clamp(36px, 4vw, 52px)',
@@ -331,7 +365,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
               marginBottom: '6px',
             }}
           >
-            {room.price}
+            {lot.price}
           </p>
           <p
             style={{
@@ -341,25 +375,47 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
               marginBottom: '28px',
             }}
           >
-            {room.priceNote}
+            {lot.priceNote}
           </p>
 
           <dl
             style={{
               borderTop: '1px solid #e5e5e5',
-              borderBottom: '1px solid #e5e5e5',
+              borderBottom: lot.home ? 'none' : '1px solid #e5e5e5',
               padding: '16px 0',
-              margin: '0 0 28px',
+              margin: 0,
               display: 'grid',
               gap: '10px',
             }}
           >
-            <Row k="Size" v={room.sqm} />
-            <Row k="Occupancy" v={room.occupancy} />
-            <Row k="Bed" v={room.bed} />
+            <Row k="Lot size" v={lot.lotSize} />
+            <Row k="Dimensions" v={lot.dimensions} />
+            <Row k="Zoning" v={lot.zoning} />
+            <Row k="Utilities" v={lot.utilities} />
+            <Row k="HOA dues" v={lot.hoa} />
           </dl>
 
-          {reserveStatus === 'reserved' ? (
+          {lot.home && (
+            <dl
+              style={{
+                borderTop: '1px solid #e5e5e5',
+                borderBottom: '1px solid #e5e5e5',
+                padding: '16px 0',
+                margin: 0,
+                display: 'grid',
+                gap: '10px',
+              }}
+            >
+              <Row k="Bedrooms" v={lot.home.beds} />
+              <Row k="Bathrooms" v={lot.home.baths} />
+              <Row k="Living area" v={lot.home.livingArea} />
+              <Row k="Builder" v={lot.home.builder} />
+            </dl>
+          )}
+
+          <div style={{ height: '28px' }} />
+
+          {inquiryStatus === 'sent' ? (
             <div
               style={{
                 width: '100%',
@@ -372,12 +428,27 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
                 textAlign: 'center',
               }}
             >
-              Reservation submitted. Our team will contact you shortly.
+              Inquiry submitted. Our sales team will contact you shortly.
+            </div>
+          ) : lot.status === 'Sold' ? (
+            <div
+              style={{
+                width: '100%',
+                padding: '16px 24px',
+                fontSize: '13px',
+                lineHeight: 1.6,
+                color: '#666666',
+                backgroundColor: '#f4f4f5',
+                border: '1px solid #e5e5e5',
+                textAlign: 'center',
+              }}
+            >
+              This lot has sold. Ask us about similar homesites.
             </div>
           ) : (
             <button
-              onClick={handleReserve}
-              disabled={createReservation.isPending || authLoading}
+              onClick={handleInquire}
+              disabled={createInquiry.isPending || authLoading}
               onMouseEnter={() => setHovered(true)}
               onMouseLeave={() => setHovered(false)}
               style={{
@@ -389,14 +460,18 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
                 backgroundColor: hovered ? '#000000' : '#ffffff',
                 border: '1px solid #000000',
                 padding: '16px 24px',
-                cursor: (createReservation.isPending || authLoading) ? 'wait' : 'pointer',
+                cursor: createInquiry.isPending || authLoading ? 'wait' : 'pointer',
                 textTransform: 'uppercase',
                 transition: 'all 0.25s ease',
                 fontFamily: '"Helvetica Neue", sans-serif',
-                opacity: (createReservation.isPending || authLoading) ? 0.6 : 1,
+                opacity: createInquiry.isPending || authLoading ? 0.6 : 1,
               }}
             >
-              {createReservation.isPending ? 'Submitting...' : 'Reserve This Room'}
+              {createInquiry.isPending
+                ? 'Submitting...'
+                : lot.status === 'Coming Soon'
+                  ? 'Join the Interest List'
+                  : 'Inquire About This Lot'}
             </button>
           )}
           <button
@@ -415,7 +490,7 @@ export default function RoomDetail({ roomId, onBack }: RoomDetailProps) {
               fontFamily: '"Helvetica Neue", sans-serif',
             }}
           >
-            ← Back to rooms
+            ← Back to all lots
           </button>
         </aside>
       </div>
@@ -429,12 +504,13 @@ function Row({ k, v }: { k: string; v: string }) {
       style={{
         display: 'flex',
         justifyContent: 'space-between',
+        gap: '16px',
         fontSize: '13px',
         color: '#333333',
       }}
     >
-      <dt style={{ color: '#666666' }}>{k}</dt>
-      <dd style={{ margin: 0, fontWeight: 500, color: '#000000' }}>{v}</dd>
+      <dt style={{ color: '#666666', flexShrink: 0 }}>{k}</dt>
+      <dd style={{ margin: 0, fontWeight: 500, color: '#000000', textAlign: 'right' }}>{v}</dd>
     </div>
   )
 }

@@ -1,15 +1,15 @@
 import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 
-const services: { label: string; detail: string }[] = [
-  { label: 'Ocean Suites', detail: 'King beds, 55m², retractable sea-facing glass facade' },
-  { label: 'Private Villas', detail: 'Plunge pool, resident butler, 24-hour in-villa service' },
-  { label: 'Spa & Wellness', detail: 'Seawater thermal circuit and coastal massage rituals' },
-  { label: 'Coastal Dining', detail: 'Two restaurants, day-boat catch, local vineyards' },
-  { label: 'Pool & Terrace', detail: '22m infinity pool, cabanas, sunset cocktail bar' },
-  { label: 'Weddings & Events', detail: 'Cliffside venue for up to 120 guests' },
-  { label: 'Concierge', detail: 'Yacht charters, hiking guides, and private excursions' },
-  { label: 'Airport Transfer', detail: 'Chauffeured arrival from Naples and Amalfi airports' },
+const amenities: { label: string; detail: string }[] = [
+  { label: 'Private Beach Access', detail: 'Deeded beach walkovers from every phase of the community' },
+  { label: 'Community Dock', detail: 'Deep-water dock and boat slips on the tidal creek' },
+  { label: 'Pool & Clubhouse', detail: 'Oceanside pool, summer kitchen, and gathering lawn' },
+  { label: 'Nature Trails', detail: 'Three miles of walking trails through marsh and maritime forest' },
+  { label: 'Gated Entry', detail: 'Single controlled entrance with landscaped gatehouse' },
+  { label: 'Fitness Pavilion', detail: 'Open-air fitness and yoga deck overlooking the marsh' },
+  { label: 'Community Green', detail: 'Central lawn for events, with fire pit and bocce court' },
+  { label: 'Golf Cart Friendly', detail: 'Cart paths connecting every lot to the beach and dock' },
 ]
 
 export default function Capabilities() {
@@ -89,7 +89,7 @@ export default function Capabilities() {
                 marginBottom: '18px',
               }}
             >
-              What we offer
+              Community amenities
             </p>
             <h2
               style={{
@@ -101,7 +101,7 @@ export default function Capabilities() {
                 marginBottom: '24px',
               }}
             >
-              Hotel Services
+              Life at Seaside Estates
             </h2>
             <p
               style={{
@@ -112,9 +112,9 @@ export default function Capabilities() {
                 maxWidth: '640px',
               }}
             >
-              From sunrise breakfast on your balcony to a private yacht at
-              dusk, every detail of a stay at LUNAMARE is quietly arranged.
-              A few of the services available to every guest:
+              From a morning walk on the beach to an evening on the community
+              dock, the amenities here are built around the water. A few of
+              the shared spaces every homeowner enjoys:
             </p>
           </div>
           <div
@@ -143,8 +143,8 @@ export default function Capabilities() {
             border: '1px solid rgba(255,255,255,0.18)',
           }}
         >
-          {services.map((service, i) => (
-            <BulletItem key={service.label} index={i} {...service} />
+          {amenities.map((amenity, i) => (
+            <BulletItem key={amenity.label} index={i} {...amenity} />
           ))}
         </ul>
       </div>
@@ -229,7 +229,7 @@ function OrbitalBadge() {
     path.setAttribute('id', pathId)
     path.setAttribute('fill', 'none')
 
-    const textContent = 'LUNAMARE \u2022 COASTAL RETREAT \u2022 EST. 1998 \u2022 '
+    const textContent = 'SEASIDE ESTATES \u2022 COASTAL LIVING \u2022 NOW SELLING \u2022 '
 
     const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     textEl.setAttribute('fill', '#ffffff')

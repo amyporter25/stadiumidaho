@@ -23,23 +23,23 @@ export const users = mysqlTable("users", {
   lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
 });
 
-export const reservationRequests = mysqlTable("reservation_requests", {
+export const inquiries = mysqlTable("inquiries", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number", unsigned: true }),
-  checkInDate: varchar("checkInDate", { length: 64 }).notNull(),
-  checkOutDate: varchar("checkOutDate", { length: 64 }).notNull(),
-  guests: varchar("guests", { length: 32 }).notNull(),
-  roomType: varchar("roomType", { length: 128 }).notNull(),
-  roomId: varchar("roomId", { length: 32 }),
   fullName: varchar("fullName", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 64 }),
+  interest: varchar("interest", { length: 64 }).notNull(),
+  lotId: varchar("lotId", { length: 32 }),
+  lotTitle: varchar("lotTitle", { length: 128 }),
+  timeframe: varchar("timeframe", { length: 64 }),
   message: text("message"),
-  status: mysqlEnum("status", ["pending", "confirmed", "cancelled"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["new", "contacted", "closed"]).default("new").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export type ReservationRequest = typeof reservationRequests.$inferSelect;
-export type InsertReservationRequest = typeof reservationRequests.$inferInsert;
+export type Inquiry = typeof inquiries.$inferSelect;
+export type InsertInquiry = typeof inquiries.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

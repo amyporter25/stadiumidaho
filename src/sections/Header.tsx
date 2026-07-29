@@ -6,8 +6,8 @@ interface HeaderProps {
   forceLight?: boolean
 }
 
-const navItems = ['Rooms', 'Experiences', 'Contact']
-const sectionIds = ['#works', '#capabilities', '#footer']
+const navItems = ['Community', 'Lots', 'Amenities', 'Contact']
+const sectionIds = ['#community', '#works', '#capabilities', '#footer']
 
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL
@@ -85,7 +85,7 @@ export default function Header({ scrollRef, forceLight = false }: HeaderProps) {
         }}
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       >
-        LUNAMARE
+        SEASIDE ESTATES
       </div>
 
       <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%' }}>
