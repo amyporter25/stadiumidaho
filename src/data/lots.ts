@@ -27,10 +27,15 @@ export interface Lot {
   utilities: string
   hoa: string
   home?: LotHome
+  coordinates?: { lat: number; lng: number }
 }
 
 export const community = {
   name: 'Seaside Estates',
+  // Approximate center of The Stadium subdivision, Caldwell, ID —
+  // replace with surveyed coordinates when the real plat data lands.
+  center: { lat: 43.68, lng: -116.67 },
+  defaultZoom: 16,
   eyebrow: 'A Coastal Residential Community · Now Selling',
   tagline: 'Where the Coast\nBecomes Home',
   intro:
@@ -42,6 +47,7 @@ export const community = {
 export const lots: Lot[] = [
   {
     id: '01',
+  coordinates: { lat: 43.68000, lng: -116.66550 },
     title: 'Lot 01 — Breakers Point',
     phase: 'Phase I · Oceanfront',
     status: 'Available',
@@ -70,6 +76,7 @@ export const lots: Lot[] = [
   },
   {
     id: '02',
+  coordinates: { lat: 43.68509, lng: -116.66491 },
     title: 'Lot 02 — The Sandpiper',
     phase: 'Phase I · Oceanfront',
     status: 'Available',
@@ -104,6 +111,7 @@ export const lots: Lot[] = [
   },
   {
     id: '03',
+  coordinates: { lat: 43.68450, lng: -116.67000 },
     title: 'Lot 03 — Dune Grass Parcel',
     phase: 'Phase I · Oceanfront',
     status: 'Under Contract',
@@ -132,6 +140,7 @@ export const lots: Lot[] = [
   },
   {
     id: '04',
+  coordinates: { lat: 43.68509, lng: -116.67509 },
     title: 'Lot 04 — Marshlight',
     phase: 'Phase II · Dune Ridge',
     status: 'Available',
@@ -160,6 +169,7 @@ export const lots: Lot[] = [
   },
   {
     id: '05',
+  coordinates: { lat: 43.68000, lng: -116.67450 },
     title: 'Lot 05 — The Heron House',
     phase: 'Phase II · Dune Ridge',
     status: 'Available',
@@ -194,6 +204,7 @@ export const lots: Lot[] = [
   },
   {
     id: '06',
+  coordinates: { lat: 43.67491, lng: -116.67509 },
     title: 'Lot 06 — Ridge Corner',
     phase: 'Phase II · Dune Ridge',
     status: 'Sold',
@@ -221,6 +232,7 @@ export const lots: Lot[] = [
   },
   {
     id: '07',
+  coordinates: { lat: 43.67550, lng: -116.67000 },
     title: 'Lot 07 — Creekbend',
     phase: 'Phase III · Marsh Walk',
     status: 'Coming Soon',
@@ -249,6 +261,7 @@ export const lots: Lot[] = [
   },
   {
     id: '08',
+  coordinates: { lat: 43.67491, lng: -116.66491 },
     title: 'Lot 08 — The Marshwalk Cottage',
     phase: 'Phase III · Marsh Walk',
     status: 'Coming Soon',

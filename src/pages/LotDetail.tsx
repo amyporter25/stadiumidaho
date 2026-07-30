@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { lots, type Lot } from '../data/lots'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
+import LotMap from '../components/LotMap'
 
 interface LotDetailProps {
   lotId: string
@@ -209,6 +210,18 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
           </h1>
         </div>
       </div>
+
+      {/* Satellite lot view */}
+      {lot.coordinates && (
+        <div style={{ borderTop: '1px solid #000000', borderBottom: '1px solid #000000' }}>
+          <LotMap
+            lots={[lot]}
+            center={lot.coordinates}
+            zoom={17}
+            height="clamp(320px, 50vh, 520px)"
+          />
+        </div>
+      )}
 
       {/* Body */}
       <div
