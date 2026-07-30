@@ -5,6 +5,7 @@ import Hero from './sections/Hero'
 import Philosophy from './sections/Philosophy'
 import Works from './sections/Works'
 import MapExplorer from './sections/MapExplorer'
+import HomePlans from './sections/HomePlans'
 import Capabilities from './sections/Capabilities'
 import Spatial from './sections/Spatial'
 import Footer from './sections/Footer'
@@ -56,6 +57,7 @@ function App() {
               <Philosophy />
               <Works scrollRef={scrollRef} onSelectLot={handleSelectLot} />
               <MapExplorer onSelectLot={handleSelectLot} />
+              <HomePlans />
               <Capabilities />
               <Hero />
             </main>

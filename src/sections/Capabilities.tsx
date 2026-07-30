@@ -4,7 +4,7 @@ import gsap from 'gsap'
 const amenities: { label: string; detail: string }[] = [
   { label: '1+ Acre Homesites', detail: 'Real elbow room — space for shops, RV parking, pools, and play' },
   { label: 'Community Trail', detail: 'A 1.8-mile equestrian, pedestrian, and bike-friendly trail through the neighborhood' },
-  { label: 'Custom Builders', detail: 'Build with one of the Valley’s top custom builders — or bring your own plan' },
+  { label: 'Custom Builders', detail: 'Plans from Blackstone Homes and the Valley’s top custom builders — or bring your own' },
   { label: 'Mountain Views', detail: 'Open sky and views in every direction from level, buildable ground' },
   { label: 'Detached Shops Allowed', detail: 'Oversized garages, shops, and barns welcome — bring your toys' },
   { label: 'Middleton Schools', detail: 'Purple Sage Elementary, Middleton Middle, and Middleton High' },
