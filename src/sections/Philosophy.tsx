@@ -4,7 +4,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const tags = ['Gated', 'Oceanfront', 'Now Selling']
+const tags = ['1+ Acre Lots', 'Custom Homes', 'Now Selling']
 
 export default function Philosophy() {
   const sectionRef = useRef<HTMLElement>(null)
@@ -78,8 +78,8 @@ export default function Philosophy() {
             maxWidth: '1200px',
           }}
         >
-          We believe a homesite is more than a parcel of land — it’s the
-          ground your life will be built on.
+          A homesite should hold more than a house — your shop, your
+          horses, your Saturdays. That’s what an acre buys you.
         </p>
 
         <div

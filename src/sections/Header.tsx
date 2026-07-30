@@ -85,7 +85,7 @@ export default function Header({ scrollRef, forceLight = false }: HeaderProps) {
         }}
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       >
-        SEASIDE ESTATES
+        THE STADIUM
       </div>
 
       <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%' }}>

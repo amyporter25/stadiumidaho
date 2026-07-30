@@ -26,25 +26,25 @@ export default function Footer() {
         }}
       >
         <OfficeColumn
-          city="Sales Gallery"
-          cityEn="VISIT US"
-          address="100 Seaside Drive — follow the entrance signs to the model home"
-          coords="Open daily, 10am – 5pm"
-          timezone="Sundays by appointment"
+          city="The Stadium"
+          cityEn="NORTH CALDWELL, ID"
+          address="West of Wagner Rd, north of Goodson Rd, Caldwell, ID 83607"
+          coords="43.7658° N, 116.7378° W"
+          timezone="Middleton School District"
         />
         <OfficeColumn
-          city="The Community"
-          cityEn="SEASIDE ESTATES"
-          address="A gated coastal subdivision — 24 homesites across three phases"
-          coords="Phase I & II now selling"
-          timezone="Phase III coming soon"
+          city="Phase 1"
+          cityEn="NOW SELLING"
+          address="Vacant homesites and new custom builds on Iron Horse Dr, Commerce Comet Way, Triple Crown Pl & Pins Triple Ct"
+          coords="Lots from 1.0 to 2+ acres"
+          timezone="Homes from $1.15M"
         />
         <OfficeColumn
-          city="Schedule a Tour"
-          cityEn="PRIVATE SHOWINGS"
-          address="Walk the lots, tour the model home, and see the amenities with our sales team"
-          coords="Golf cart tours available"
-          timezone="Book via the inquiry form above"
+          city="Phase 2"
+          cityEn="COMING SOON"
+          address="Stadium Subdivision No. 2 — 60+ homesites off Moscow Way & Goodson Rd"
+          coords="0.35 to 3.27 acres"
+          timezone="Interest list open now"
         />
         <div>
           <p
@@ -59,11 +59,11 @@ export default function Footer() {
             CONTACT
           </p>
           <p style={{ fontSize: '14px', color: '#666666', lineHeight: 2 }}>
-            sales@seasideestates.com
+            info@thestadiumidaho.com
             <br />
-            +1 (555) 010-0123
+            +1 (208) 555-0123
             <br />
-            Instagram: @seasideestates
+            LandVest Idaho
           </p>
         </div>
       </div>
@@ -89,7 +89,7 @@ export default function Footer() {
             userSelect: 'none',
           }}
         >
-          SEASIDE
+          THE STADIUM
         </span>
       </div>
     </footer>

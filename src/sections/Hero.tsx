@@ -229,7 +229,7 @@ export default function Hero() {
           >
             Find your
             <br />
-            homesite
+            acre
           </h2>
           <p
             style={{
@@ -239,7 +239,7 @@ export default function Hero() {
               textTransform: 'uppercase',
             }}
           >
-            SEASIDE ESTATES · Sales & Inquiries
+            THE STADIUM · Sales & Inquiries
           </p>
         </div>
       </div>

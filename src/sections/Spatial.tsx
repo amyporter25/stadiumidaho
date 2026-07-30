@@ -97,7 +97,7 @@ export default function Spatial() {
             textTransform: 'uppercase',
           }}
         >
-          A Coastal Residential Community · Now Selling
+          North Caldwell, Idaho · Now Selling
         </span>
 
         <h1
@@ -111,9 +111,9 @@ export default function Spatial() {
             textShadow: '0 2px 24px rgba(0,0,0,0.25)',
           }}
         >
-          Where the Coast
+          Room to Live.
           <br />
-          Becomes Home
+          Space to Breathe.
         </h1>
 
         <p
@@ -125,10 +125,10 @@ export default function Spatial() {
             maxWidth: '520px',
           }}
         >
-          Seaside Estates is a gated coastal subdivision of 24 homesites set
-          along a quiet stretch of shoreline — some offered as build-ready
-          vacant lots, others with completed or under-construction homes.
-          Every lot is a short walk from the water.
+          The Stadium is a custom-home community in north Caldwell — 1+ acre
+          homesites with mountain views, equestrian-friendly trails, and room
+          for shops, RVs, and real elbow room. West of Wagner Road, north of
+          Goodson Road.
         </p>
 
         <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
@@ -169,7 +169,7 @@ export default function Spatial() {
               textUnderlineOffset: '6px',
             }}
           >
-            Our Community Story →
+            Explore the Community →
           </button>
         </div>
       </div>

@@ -92,9 +92,10 @@ export default function MapExplorer({ onSelectLot }: MapExplorerProps) {
             maxWidth: '640px',
           }}
         >
-          Lot positions shown are illustrative. Surveyed lot boundaries will
-          appear here once final plat data is published. Select any lot marker
-          to view its full details.
+          Phase 1 lot markers are positioned by street. Phase 2 boundaries
+          come from the recorded plat (Stadium Subdivision No. 2, Canyon
+          County 2025) and will be drawn to survey accuracy here. Select any
+          lot marker to view its full details.
         </p>
       </div>
     </section>
