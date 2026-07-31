@@ -50,7 +50,7 @@ export default function Spatial() {
     >
       <video
         ref={videoRef}
-        src="/videos/sea-hotel.mp4"
+        src="/videos/stadium-road.mp4"
         muted
         loop
         playsInline

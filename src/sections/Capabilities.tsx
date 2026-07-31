@@ -35,7 +35,7 @@ export default function Capabilities() {
     >
       <video
         ref={videoRef}
-        src="/videos/spatial.mp4"
+        src="/videos/stadium-road.mp4#t=4"
         muted
         loop
         playsInline
