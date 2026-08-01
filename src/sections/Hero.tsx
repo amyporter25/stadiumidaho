@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
-import { lots } from '../data/lots'
+import { loadStadiumLots } from '../components/LotMap'
 
 const vertexShader = `
 varying vec2 vUv;
@@ -70,6 +70,25 @@ export default function Hero() {
   })
 
   const { user } = useAuth()
+
+  const [lotOptions, setLotOptions] = useState<string[]>([])
+  useEffect(() => {
+    loadStadiumLots()
+      .then((features) => {
+        const names = features
+          .filter((f) => f.geometry)
+          .map((f) => {
+            const p = f.properties
+            return p.phase ? `Lot ${p.name} — ${p.phase}` : `Lot ${p.name}`
+          })
+          .sort((a, b) => {
+            const num = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
+            return num(a) - num(b)
+          })
+        setLotOptions(names)
+      })
+      .catch(() => setLotOptions([]))
+  }, [])
 
   // Pre-fill name and email from authenticated user
   useEffect(() => {
@@ -326,7 +345,7 @@ export default function Hero() {
                   name="lotTitle"
                   value={formData.lotTitle}
                   onChange={handleChange}
-                  options={['No specific lot yet', ...lots.map((l) => l.title)]}
+                  options={['No specific lot yet', ...lotOptions]}
                 />
                 <SelectField
                   label="Purchase timeframe"

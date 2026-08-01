@@ -1,18 +1,34 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import LotMap from '../components/LotMap'
-import { lots } from '../data/lots'
+import LotMap, { loadStadiumLots, type StadiumLotFeature } from '../components/LotMap'
 
 gsap.registerPlugin(ScrollTrigger)
 
 interface MapExplorerProps {
-  onSelectLot: (id: string) => void
+  onSelectLot: (name: string) => void
 }
 
 export default function MapExplorer({ onSelectLot }: MapExplorerProps) {
   const sectionRef = useRef<HTMLElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
+  const [stats, setStats] = useState<{ available: number; from: number | null }>({
+    available: 0,
+    from: null,
+  })
+
+  useEffect(() => {
+    loadStadiumLots().then((features: StadiumLotFeature[]) => {
+      const available = features.filter((f) => f.properties.status === 'Available')
+      const prices = available
+        .map((f) => f.properties.price)
+        .filter((p): p is number => typeof p === 'number')
+      setStats({
+        available: available.length,
+        from: prices.length ? Math.min(...prices) : null,
+      })
+    })
+  }, [])
 
   useEffect(() => {
     const section = sectionRef.current
@@ -56,6 +72,8 @@ export default function MapExplorer({ onSelectLot }: MapExplorerProps) {
             marginBottom: '48px',
             borderBottom: '1px solid rgba(255,255,255,0.35)',
             paddingBottom: '20px',
+            flexWrap: 'wrap',
+            gap: '12px',
           }}
         >
           <h2
@@ -77,11 +95,13 @@ export default function MapExplorer({ onSelectLot }: MapExplorerProps) {
               textTransform: 'uppercase',
             }}
           >
-            Live satellite view · Click a lot
+            {stats.available > 0
+              ? `${stats.available} lots available${stats.from ? ` · From $${stats.from.toLocaleString()}` : ''}`
+              : 'Live lot availability'}
           </span>
         </div>
 
-        <LotMap lots={lots} onSelectLot={onSelectLot} height="clamp(420px, 65vh, 680px)" />
+        <LotMap onSelectLot={onSelectLot} height="clamp(420px, 70vh, 720px)" />
 
         <p
           style={{
@@ -89,13 +109,12 @@ export default function MapExplorer({ onSelectLot }: MapExplorerProps) {
             fontSize: '13px',
             lineHeight: 1.7,
             color: 'rgba(255,255,255,0.55)',
-            maxWidth: '640px',
+            maxWidth: '720px',
           }}
         >
-          Phase 1 lot markers are positioned by street. Phase 2 boundaries
-          come from the recorded plat (Stadium Subdivision No. 2, Canyon
-          County 2025) and will be drawn to survey accuracy here. Select any
-          lot marker to view its full details.
+          Lot boundaries and availability from the recorded plat and current
+          inventory for Stadium Subdivision No. 2, Canyon County. Hover any
+          lot to preview it; click to view full details.
         </p>
       </div>
     </section>

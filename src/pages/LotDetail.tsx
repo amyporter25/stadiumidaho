@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
-import { lots, type Lot } from '../data/lots'
+import { useEffect, useMemo, useState } from 'react'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
-import LotMap from '../components/LotMap'
+import LotMap, {
+  loadStadiumLots,
+  statusPinColor,
+  type StadiumLotFeature,
+  type StadiumStatus,
+} from '../components/LotMap'
 
 interface LotDetailProps {
-  lotId: string
+  lotName: string
   onBack: () => void
 }
 
@@ -25,37 +29,52 @@ function getOAuthUrl() {
   return url.toString()
 }
 
-function statusColors(status: Lot['status']): { fg: string; bg: string; border: string } {
-  switch (status) {
-    case 'Available':
-      return { fg: '#1a6b3a', bg: '#e8f5e9', border: '#1a6b3a' }
-    case 'Under Contract':
-      return { fg: '#8a5a00', bg: '#fdf3e0', border: '#8a5a00' }
-    case 'Sold':
-      return { fg: '#8a1a1a', bg: '#fbeaea', border: '#8a1a1a' }
-    case 'Coming Soon':
-      return { fg: '#1a4a8a', bg: '#e8f0fb', border: '#1a4a8a' }
+function centroid(feature: StadiumLotFeature): { lat: number; lng: number } | null {
+  if (feature.properties.label) {
+    return { lng: feature.properties.label[0], lat: feature.properties.label[1] }
   }
+  if (!feature.geometry) return null
+  const ring = feature.geometry.coordinates[0]
+  let lat = 0
+  let lng = 0
+  for (const [x, y] of ring) {
+    lng += x
+    lat += y
+  }
+  return { lat: lat / ring.length, lng: lng / ring.length }
 }
 
-export default function LotDetail({ lotId, onBack }: LotDetailProps) {
-  const lot = lots.find((l) => l.id === lotId)
+function fmtPrice(price: number | null): string {
+  return price ? `$${price.toLocaleString()}` : 'Contact for pricing'
+}
+
+export default function LotDetail({ lotName, onBack }: LotDetailProps) {
+  const [features, setFeatures] = useState<StadiumLotFeature[] | null>(null)
   const [hovered, setHovered] = useState(false)
   const [inquiryStatus, setInquiryStatus] = useState<'idle' | 'sent'>('idle')
   const { user, isLoading: authLoading } = useAuth()
 
+  useEffect(() => {
+    loadStadiumLots().then(setFeatures)
+  }, [])
+
+  const lot = useMemo(
+    () => features?.find((f) => f.properties.name === lotName) ?? null,
+    [features, lotName]
+  )
+
+  const center = useMemo(() => (lot ? centroid(lot) : null), [lot])
+
   const createInquiry = trpc.inquiry.create.useMutation({
-    onSuccess: () => {
-      setInquiryStatus('sent')
-    },
+    onSuccess: () => setInquiryStatus('sent'),
   })
 
   const handleInquire = () => {
     if (!lot) return
+    const title = `Lot ${lot.properties.name}, ${lot.properties.phase} — Stadium Subdivision No. 2`
     if (!user) {
-      // Store intended inquiry in sessionStorage, redirect to login
-      sessionStorage.setItem('pending_inquiry_lot_id', lot.id)
-      sessionStorage.setItem('pending_inquiry_lot_title', lot.title)
+      sessionStorage.setItem('pending_inquiry_lot_name', lot.properties.name)
+      sessionStorage.setItem('pending_inquiry_lot_title', title)
       window.location.href = getOAuthUrl()
       return
     }
@@ -63,33 +82,33 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
       fullName: user.name || '',
       email: user.email || '',
       interest: 'Lot Inquiry',
-      lotId: lot.id,
-      lotTitle: lot.title,
+      lotId: lot.properties.name,
+      lotTitle: title,
     })
   }
 
-  // Check for pending inquiry after OAuth redirect
   useEffect(() => {
-    const pendingLotId = sessionStorage.getItem('pending_inquiry_lot_id')
-    const pendingLotTitle = sessionStorage.getItem('pending_inquiry_lot_title')
-    if (pendingLotId && pendingLotTitle && user && lotId === pendingLotId) {
-      sessionStorage.removeItem('pending_inquiry_lot_id')
+    const pendingName = sessionStorage.getItem('pending_inquiry_lot_name')
+    const pendingTitle = sessionStorage.getItem('pending_inquiry_lot_title')
+    if (pendingName && pendingTitle && user && lotName === pendingName) {
+      sessionStorage.removeItem('pending_inquiry_lot_name')
       sessionStorage.removeItem('pending_inquiry_lot_title')
       createInquiry.mutate({
         fullName: user.name || '',
         email: user.email || '',
         interest: 'Lot Inquiry',
-        lotId: pendingLotId,
-        lotTitle: pendingLotTitle,
+        lotId: pendingName,
+        lotTitle: pendingTitle,
       })
     }
-  }, [user, lotId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, lotName])
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' })
-  }, [lotId])
+  }, [lotName])
 
-  if (!lot) {
+  if (features && !lot) {
     return (
       <div
         style={{
@@ -116,109 +135,106 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
             textTransform: 'uppercase',
           }}
         >
-          ← Back to lots
+          ← Back to map
         </button>
       </div>
     )
   }
 
-  const status = statusColors(lot.status)
+  if (!lot) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#0b0b0b',
+          color: 'rgba(255,255,255,0.5)',
+          fontSize: '12px',
+          letterSpacing: '0.24em',
+          textTransform: 'uppercase',
+        }}
+      >
+        Loading lot…
+      </div>
+    )
+  }
+
+  const p = lot.properties
+  const statusColor = statusPinColor(p.status as StadiumStatus)
+  const highlights = [
+    ...(p.acreage ? [`${p.acreage}-acre homesite`] : []),
+    ...(p.facing ? [`Faces ${p.facing}`] : []),
+    ...p.features,
+    'Bring your own builder',
+    'Middleton School District',
+  ]
+  // de-dup while preserving order
+  const uniqueHighlights = highlights.filter((h, i) => highlights.indexOf(h) === i)
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh' }}>
-      {/* Hero image */}
+      {/* Header band */}
       <div
         style={{
-          position: 'relative',
-          width: '100%',
-          height: 'clamp(400px, 70vh, 720px)',
-          overflow: 'hidden',
           backgroundColor: '#0b0b0b',
+          color: '#ffffff',
+          padding: 'clamp(120px, 16vh, 160px) clamp(24px, 4vw, 60px) clamp(40px, 6vw, 64px)',
         }}
       >
-        <img
-          src={lot.img}
-          alt={lot.title}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 100%)',
-          }}
-        />
-        <button
-          onClick={onBack}
-          style={{
-            position: 'absolute',
-            top: 'clamp(100px, 14vh, 140px)',
-            left: 'clamp(24px, 4vw, 60px)',
-            fontSize: '12px',
-            letterSpacing: '0.16em',
-            padding: '12px 24px',
-            border: '1px solid #ffffff',
-            backgroundColor: 'rgba(0,0,0,0.35)',
-            color: '#ffffff',
-            cursor: 'pointer',
-            textTransform: 'uppercase',
-            fontFamily: '"Helvetica Neue", sans-serif',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-          }}
-        >
-          ← Back
-        </button>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 'clamp(32px, 5vw, 60px)',
-            left: 'clamp(24px, 4vw, 60px)',
-            right: 'clamp(24px, 4vw, 60px)',
-            color: '#ffffff',
-          }}
-        >
+        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+          <button
+            onClick={onBack}
+            style={{
+              fontSize: '12px',
+              letterSpacing: '0.16em',
+              padding: '12px 24px',
+              border: '1px solid #ffffff',
+              backgroundColor: 'transparent',
+              color: '#ffffff',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              fontFamily: '"Helvetica Neue", sans-serif',
+              marginBottom: '40px',
+            }}
+          >
+            ← Back to map
+          </button>
           <p
             style={{
               fontSize: '12px',
               letterSpacing: '0.2em',
               textTransform: 'uppercase',
-              opacity: 0.8,
+              opacity: 0.7,
               marginBottom: '12px',
             }}
           >
-            Lot {lot.id} · {lot.phase} · {lot.type}
+            Stadium Subdivision No. 2 · {p.phase} · Lot {p.name}
           </p>
           <h1
             style={{
-              fontSize: 'clamp(36px, 6vw, 80px)',
+              fontSize: 'clamp(40px, 6vw, 84px)',
               fontWeight: 400,
               letterSpacing: '-0.03em',
               lineHeight: 1.02,
               margin: 0,
-              maxWidth: '900px',
             }}
           >
-            {lot.title}
+            Lot {p.name}
           </h1>
         </div>
       </div>
 
-      {/* Satellite lot view */}
-      {lot.coordinates && (
-        <div style={{ borderTop: '1px solid #000000', borderBottom: '1px solid #000000' }}>
+      {/* Map */}
+      {center && (
+        <div style={{ borderBottom: '1px solid #000000' }}>
           <LotMap
-            lots={[lot]}
-            center={lot.coordinates}
+            height="clamp(360px, 55vh, 560px)"
+            center={center}
             zoom={17}
-            height="clamp(320px, 50vh, 520px)"
+            interactive={false}
+            filterLot={(f) => f.properties.name === p.name}
           />
         </div>
       )}
@@ -235,7 +251,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
           alignItems: 'flex-start',
         }}
       >
-        {/* Left: description + features */}
+        {/* Left */}
         <div style={{ flex: '2 1 600px', minWidth: 0 }}>
           <p
             style={{
@@ -248,23 +264,25 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
               maxWidth: '680px',
             }}
           >
-            {lot.tagline}
+            {p.acreage
+              ? `A ${p.acreage}-acre homesite in The Stadium's ${p.phase}, ready for your custom build.`
+              : `A homesite in The Stadium's ${p.phase}, ready for your custom build.`}
           </p>
 
-          {lot.description.map((p, i) => (
-            <p
-              key={i}
-              style={{
-                fontSize: '16px',
-                lineHeight: 1.8,
-                color: '#333333',
-                marginBottom: '24px',
-                maxWidth: '680px',
-              }}
-            >
-              {p}
-            </p>
-          ))}
+          <p
+            style={{
+              fontSize: '16px',
+              lineHeight: 1.8,
+              color: '#333333',
+              marginBottom: '24px',
+              maxWidth: '680px',
+            }}
+          >
+            Every lot in The Stadium comes with paved streets, power at the lot
+            line, and room for the things city lots can't hold — a detached
+            shop, RV parking, a real backyard. Bring your own builder, or
+            choose from plans already being built in the community.
+          </p>
 
           <div
             style={{
@@ -294,7 +312,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
                 gap: '14px 40px',
               }}
             >
-              {lot.features.map((f) => (
+              {uniqueHighlights.map((f) => (
                 <li
                   key={f}
                   style={{
@@ -322,7 +340,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
           </div>
         </div>
 
-        {/* Right: pricing panel */}
+        {/* Right: panel */}
         <aside
           style={{
             flex: '1 1 320px',
@@ -351,7 +369,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
                 margin: 0,
               }}
             >
-              {lot.status === 'Sold' ? 'Last list price' : 'List price'}
+              List price
             </p>
             <span
               style={{
@@ -359,13 +377,12 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
                 fontWeight: 600,
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase',
-                color: status.fg,
-                backgroundColor: status.bg,
-                border: `1px solid ${status.border}`,
+                color: '#ffffff',
+                backgroundColor: statusColor,
                 padding: '5px 10px',
               }}
             >
-              {lot.status}
+              {p.grooveStatus}
             </span>
           </div>
           <p
@@ -378,7 +395,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
               marginBottom: '6px',
             }}
           >
-            {lot.price}
+            {p.status === 'Available' ? fmtPrice(p.price) : p.grooveStatus}
           </p>
           <p
             style={{
@@ -388,43 +405,25 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
               marginBottom: '28px',
             }}
           >
-            {lot.priceNote}
+            {p.status === 'Available' ? 'vacant land, bring your own builder' : 'contact us about similar lots'}
           </p>
 
           <dl
             style={{
               borderTop: '1px solid #e5e5e5',
-              borderBottom: lot.home ? 'none' : '1px solid #e5e5e5',
+              borderBottom: '1px solid #e5e5e5',
               padding: '16px 0',
               margin: 0,
               display: 'grid',
               gap: '10px',
             }}
           >
-            <Row k="Lot size" v={lot.lotSize} />
-            <Row k="Dimensions" v={lot.dimensions} />
-            <Row k="Zoning" v={lot.zoning} />
-            <Row k="Utilities" v={lot.utilities} />
-            <Row k="HOA dues" v={lot.hoa} />
+            <Row k="Lot" v={p.name} />
+            <Row k="Phase" v={p.phase} />
+            {p.acreage && <Row k="Size" v={`${p.acreage} acres`} />}
+            {p.facing && <Row k="Facing" v={p.facing} />}
+            <Row k="Schools" v="Middleton SD" />
           </dl>
-
-          {lot.home && (
-            <dl
-              style={{
-                borderTop: '1px solid #e5e5e5',
-                borderBottom: '1px solid #e5e5e5',
-                padding: '16px 0',
-                margin: 0,
-                display: 'grid',
-                gap: '10px',
-              }}
-            >
-              <Row k="Bedrooms" v={lot.home.beds} />
-              <Row k="Bathrooms" v={lot.home.baths} />
-              <Row k="Living area" v={lot.home.livingArea} />
-              <Row k="Builder" v={lot.home.builder} />
-            </dl>
-          )}
 
           <div style={{ height: '28px' }} />
 
@@ -443,7 +442,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
             >
               Inquiry submitted. Our sales team will contact you shortly.
             </div>
-          ) : lot.status === 'Sold' ? (
+          ) : p.status === 'Sold' ? (
             <div
               style={{
                 width: '100%',
@@ -480,11 +479,7 @@ export default function LotDetail({ lotId, onBack }: LotDetailProps) {
                 opacity: createInquiry.isPending || authLoading ? 0.6 : 1,
               }}
             >
-              {createInquiry.isPending
-                ? 'Submitting...'
-                : lot.status === 'Coming Soon'
-                  ? 'Join the Interest List'
-                  : 'Inquire About This Lot'}
+              {createInquiry.isPending ? 'Submitting...' : 'Inquire About This Lot'}
             </button>
           )}
           <button

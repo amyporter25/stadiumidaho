@@ -6,8 +6,8 @@ interface HeaderProps {
   forceLight?: boolean
 }
 
-const navItems = ['Community', 'Lots', 'Map', 'Plans', 'Amenities', 'Contact']
-const sectionIds = ['#community', '#works', '#map', '#plans', '#capabilities', '#footer']
+const navItems = ['Community', 'Lots', 'Plans', 'Amenities', 'Contact']
+const sectionIds = ['#community', '#map', '#plans', '#capabilities', '#footer']
 
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL

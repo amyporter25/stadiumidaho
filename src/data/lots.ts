@@ -35,7 +35,7 @@ export const community = {
   // Approximate center of The Stadium subdivision, Caldwell, ID
   // (NW corner of Goodson Rd & Wagner Rd). Will be refined to surveyed
   // accuracy when the plat is geo-referenced against the section corner.
-  center: { lat: 43.76584, lng: -116.7378 },
+  center: { lat: 43.7693, lng: -116.7441 },
   defaultZoom: 16,
   eyebrow: 'North Caldwell, Idaho · Now Selling',
   tagline: 'Room to Live.\nSpace to Breathe.',
