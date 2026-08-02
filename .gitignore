@@ -32,3 +32,4 @@ coverage/
 # Large media assets
 # public/videos/  <-- required for deployment, do not ignore
 node_modules
+data/

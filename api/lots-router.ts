@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
 import { analyzeLot, fetchTerrainGrid3D } from "./lot-analysis";
@@ -113,26 +115,65 @@ function transformBundle(bundle: {
 let cache: { data: StadiumLotFeature[]; fetchedAt: number } | null = null;
 let inflight: Promise<StadiumLotFeature[]> | null = null;
 
+// Persist the bundle so a server restart never leaves the site without lot
+// data while Groove is slow; stale disk data is better than an error.
+const LOTS_CACHE_FILE = path.join(process.cwd(), "data", "lots-bundle.json");
+
+function readLotsFromDisk(): { data: StadiumLotFeature[]; fetchedAt: number } | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(LOTS_CACHE_FILE, "utf8")) as {
+      data: StadiumLotFeature[];
+      fetchedAt: number;
+    };
+    if (!raw.data?.length) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function writeLotsToDisk(entry: { data: StadiumLotFeature[]; fetchedAt: number }): void {
+  try {
+    fs.mkdirSync(path.dirname(LOTS_CACHE_FILE), { recursive: true });
+    fs.writeFileSync(LOTS_CACHE_FILE, JSON.stringify(entry));
+  } catch {
+    // best-effort
+  }
+}
+
 async function fetchLiveLots(): Promise<StadiumLotFeature[]> {
   if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache.data;
   if (inflight) return inflight;
 
   inflight = (async () => {
-    // Groove's endpoint can take 20-30s to respond when it's regenerating
-    // the bundle, so allow a generous window before declaring it dead.
-    const res = await fetch(WIDGET_URL, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!res.ok) throw new Error(`Groove widget fetch failed: ${res.status}`);
-    const json = (await res.json()) as {
-      data: { bundle: { phases: GroovePhase[]; properties: GrooveProperty[] } };
-    };
-    const features = transformBundle(json.data.bundle);
-    if (features.length === 0)
-      throw new Error("Groove bundle contained no matched lots");
-    cache = { data: features, fetchedAt: Date.now() };
-    return features;
+    try {
+      // Groove's endpoint can take 20-30s to respond when it's regenerating
+      // the bundle, so allow a generous window before declaring it dead.
+      const res = await fetch(WIDGET_URL, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) throw new Error(`Groove widget fetch failed: ${res.status}`);
+      const json = (await res.json()) as {
+        data: { bundle: { phases: GroovePhase[]; properties: GrooveProperty[] } };
+      };
+      const features = transformBundle(json.data.bundle);
+      if (features.length === 0)
+        throw new Error("Groove bundle contained no matched lots");
+      cache = { data: features, fetchedAt: Date.now() };
+      writeLotsToDisk(cache);
+      return features;
+    } catch (err) {
+      // fall back to whatever we have — memory (even if stale), then disk —
+      // rather than taking the lot pages down with us
+      if (cache) return cache.data;
+      const disk = readLotsFromDisk();
+      if (disk) {
+        cache = disk;
+        return disk.data;
+      }
+      throw err;
+    }
   })();
 
   try {
@@ -140,6 +181,42 @@ async function fetchLiveLots(): Promise<StadiumLotFeature[]> {
   } finally {
     inflight = null;
   }
+}
+
+// Seed the memory cache from disk at module load so cold starts are cheap.
+if (!cache) {
+  const disk = readLotsFromDisk();
+  if (disk) cache = disk;
+}
+
+/**
+ * Background cache warmer: after server boot, walk every lot (available
+ * ones first) and fetch its terrain grid in the background, so by the time
+ * a real visitor clicks a lot page the data is already hot. Sequential and
+ * deliberately slow — the DEM API is free and rate-limited.
+ */
+export function warmLotCachesInBackground(): void {
+  void (async () => {
+    try {
+      const features = await fetchLiveLots();
+      const ordered = [...features].sort((a, b) => {
+        const aOpen = a.properties.status === "Available" ? 0 : 1;
+        const bOpen = b.properties.status === "Available" ? 0 : 1;
+        return aOpen - bOpen;
+      });
+      for (const lot of ordered) {
+        if (!lot.geometry) continue;
+        try {
+          await fetchTerrainGrid3D(lot.properties.name, lot.geometry.coordinates[0]);
+        } catch {
+          // skip this lot; a real visit will retry on demand
+        }
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+    } catch {
+      // warming is best-effort
+    }
+  })();
 }
 
 export const lotsRouter = createRouter({

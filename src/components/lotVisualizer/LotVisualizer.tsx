@@ -69,7 +69,18 @@ const EYE_M = 1.7
 export default function LotVisualizer({ lotName, center, polygon, facing }: LotVisualizerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
 
-  const terrainQ = trpc.lots.terrain3d.useQuery({ lotName }, { staleTime: 24 * 3600 * 1000, retry: 1 })
+  // A cold terrain build can take ~20-40s server-side (DEM fetch). The first
+  // attempt may die on a proxy timeout while the server keeps working, so
+  // retry several times — later attempts join the in-flight build or hit a
+  // warm cache and return in milliseconds.
+  const terrainQ = trpc.lots.terrain3d.useQuery(
+    { lotName },
+    {
+      staleTime: 24 * 3600 * 1000,
+      retry: 4,
+      retryDelay: (attempt) => Math.min(2000 * (attempt + 1), 8000),
+    }
+  )
   const terrain = terrainQ.data as Terrain | undefined
 
   const [planId, setPlanId] = useState(homePlans[0].id)
@@ -435,8 +446,30 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
 
         {/* viewport */}
         <div style={{ position: 'relative', width: '100%', height: 'clamp(420px, 62vh, 620px)', backgroundColor: '#111' }}>
-          {terrainQ.isLoading && <CenteredNote>Building the lot in 3D…</CenteredNote>}
-          {terrainQ.isError && <CenteredNote>3D view unavailable for this lot right now.</CenteredNote>}
+          {terrainQ.isLoading && (
+            <CenteredNote>
+              Building the lot in 3D…
+              <span style={{ display: 'block', marginTop: '8px', letterSpacing: '0.04em', textTransform: 'none' }}>
+                First build fetches real elevation data — can take up to a minute.
+              </span>
+            </CenteredNote>
+          )}
+          {terrainQ.isError && (
+            <CenteredNote>
+              3D view is taking longer than usual.
+              <button
+                onClick={() => terrainQ.refetch()}
+                style={{
+                  display: 'block', margin: '16px auto 0', padding: '10px 22px',
+                  fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase',
+                  border: '1px solid #f2b04a', backgroundColor: 'transparent',
+                  color: '#f2b04a', cursor: 'pointer',
+                }}
+              >
+                Try again
+              </button>
+            </CenteredNote>
+          )}
           <div ref={hostRef} style={{ position: 'absolute', inset: 0, cursor: mode === 'moveHouse' ? 'grab' : 'default' }} />
 
           {ready && (

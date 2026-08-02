@@ -187,7 +187,11 @@ function SlopeProfileViz({ a }: { a: LotAnalysis }) {
 export default function LotSunTerrain({ lotName }: { lotName: string }) {
   const q = trpc.lots.analysis.useQuery(
     { lotName },
-    { staleTime: 24 * 3600 * 1000, retry: 1 }
+    {
+      staleTime: 24 * 3600 * 1000,
+      retry: 4,
+      retryDelay: (attempt) => Math.min(2000 * (attempt + 1), 8000),
+    }
   )
   const [season, setSeason] = useState<'summer' | 'equinox' | 'winter'>('summer')
 

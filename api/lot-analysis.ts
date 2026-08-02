@@ -15,6 +15,9 @@
  * expensive part (fetching + caching the DEM) happens once per lot.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 export interface SunSample {
   time: string; // "HH:MM" local
   altitude: number; // degrees above horizon
@@ -435,11 +438,53 @@ const CACHE_TTL = 24 * 3600 * 1000;
  * the 3D visualizer's terrain grid derive from it, so a lot's first visit
  * pays the elevation fetch exactly once. A denser 10 m grid would take
  * ~45–60 s and isn't warranted for planning-level marketing estimates.
+ *
+ * The grid is also persisted to disk (elevation data is effectively static),
+ * so a server restart or redeploy never makes visitors pay the cold-fetch
+ * cost again.
  */
 const gridCache = new Map<
   string,
   { at: number; spec: GridSpec; z: number[][] }
 >();
+const gridInflight = new Map<
+  string,
+  Promise<{ spec: GridSpec; z: number[][] }>
+>();
+
+const GRID_CACHE_DIR = path.join(process.cwd(), "data", "terrain-grids");
+const GRID_DISK_TTL = 30 * 24 * 3600 * 1000; // 30 days — DEM data barely changes
+
+function gridCacheFile(lotName: string): string {
+  return path.join(GRID_CACHE_DIR, `${lotName.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`);
+}
+
+function readGridFromDisk(lotName: string): { spec: GridSpec; z: number[][] } | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(gridCacheFile(lotName), "utf8")) as {
+      at: number;
+      spec: GridSpec;
+      z: number[][];
+    };
+    if (Date.now() - raw.at > GRID_DISK_TTL) return null;
+    if (!raw.spec?.lats?.length || !raw.z?.length) return null;
+    return { spec: raw.spec, z: raw.z };
+  } catch {
+    return null;
+  }
+}
+
+function writeGridToDisk(lotName: string, spec: GridSpec, z: number[][]): void {
+  try {
+    fs.mkdirSync(GRID_CACHE_DIR, { recursive: true });
+    fs.writeFileSync(
+      gridCacheFile(lotName),
+      JSON.stringify({ at: Date.now(), spec, z })
+    );
+  } catch {
+    // disk cache is best-effort; memory cache still applies
+  }
+}
 
 async function fetchCoarseGrid(
   lotName: string,
@@ -448,17 +493,38 @@ async function fetchCoarseGrid(
   const hit = gridCache.get(lotName);
   if (hit && Date.now() - hit.at < CACHE_TTL) return { spec: hit.spec, z: hit.z };
 
-  const spec = buildGridSpec(ring, 20, 180);
-  const pts: { lat: number; lng: number }[] = [];
-  for (const lat of spec.lats) for (const lng of spec.lngs) pts.push({ lat, lng });
-  const zFlat = await fetchElevations(pts, 500);
+  // concurrent requests for the same lot share one fetch — otherwise the
+  // terrain3d + analysis calls on a lot page double-hammer the DEM API
+  const pending = gridInflight.get(lotName);
+  if (pending) return pending;
 
-  const z: number[][] = [];
-  for (let r = 0; r < spec.lats.length; r++)
-    z.push(zFlat.slice(r * spec.lngs.length, (r + 1) * spec.lngs.length));
+  const fromDisk = readGridFromDisk(lotName);
+  if (fromDisk) {
+    gridCache.set(lotName, { at: Date.now(), ...fromDisk });
+    return fromDisk;
+  }
 
-  gridCache.set(lotName, { at: Date.now(), spec, z });
-  return { spec, z };
+  const work = (async () => {
+    const spec = buildGridSpec(ring, 20, 180);
+    const pts: { lat: number; lng: number }[] = [];
+    for (const lat of spec.lats) for (const lng of spec.lngs) pts.push({ lat, lng });
+    const zFlat = await fetchElevations(pts, 500);
+
+    const z: number[][] = [];
+    for (let r = 0; r < spec.lats.length; r++)
+      z.push(zFlat.slice(r * spec.lngs.length, (r + 1) * spec.lngs.length));
+
+    gridCache.set(lotName, { at: Date.now(), spec, z });
+    writeGridToDisk(lotName, spec, z);
+    return { spec, z };
+  })();
+
+  gridInflight.set(lotName, work);
+  try {
+    return await work;
+  } finally {
+    gridInflight.delete(lotName);
+  }
 }
 
 export async function analyzeLot(

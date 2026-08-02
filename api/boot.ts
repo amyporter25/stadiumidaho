@@ -32,5 +32,8 @@ if (env.isProduction) {
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Pre-warm lot terrain caches in the background so first lot-page visits
+    // don't hit the slow cold-fetch path.
+    void import("./lots-router").then((m) => m.warmLotCachesInBackground());
   });
 }
