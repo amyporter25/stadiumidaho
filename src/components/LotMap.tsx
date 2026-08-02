@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { GoogleMap, useJsApiLoader } from '@react-google-maps/api'
+import { GoogleMap } from '@react-google-maps/api'
 import { trpc } from '@/providers/trpc'
 import { community } from '../data/lots'
 
@@ -21,11 +21,67 @@ export interface StadiumLotFeature {
   }
 }
 
-export function useGoogleMaps() {
-  return useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+/**
+ * Direct Google Maps JS loader.
+ *
+ * Replaces @react-google-maps/api's useJsApiLoader, whose internal
+ * js-api-loader intermittently never resolves its load event (leaving
+ * isLoaded=false forever and the map stuck on "Loading map…"). We inject the
+ * script tag ourselves and poll for google.maps.Map — simple and observable.
+ */
+declare global {
+  interface Window {
+    __gmapsPromise?: Promise<void>
+  }
+}
+
+function loadGoogleMapsScript(): Promise<void> {
+  if (window.google?.maps?.Map) return Promise.resolve()
+  if (window.__gmapsPromise) return window.__gmapsPromise
+
+  window.__gmapsPromise = new Promise<void>((resolve, reject) => {
+    const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src*="maps.googleapis.com/maps/api/js"]'
+    )
+    if (!existing) {
+      const s = document.createElement('script')
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly`
+      s.async = true
+      s.defer = true
+      s.onerror = () => reject(new Error('Google Maps script failed to load'))
+      document.head.appendChild(s)
+    }
+
+    const started = Date.now()
+    const iv = window.setInterval(() => {
+      if (window.google?.maps?.Map) {
+        window.clearInterval(iv)
+        resolve()
+      } else if (Date.now() - started > 20000) {
+        window.clearInterval(iv)
+        reject(new Error('Google Maps did not initialize within 20s'))
+      }
+    }, 150)
   })
+  return window.__gmapsPromise
+}
+
+export function useGoogleMaps(): { isLoaded: boolean; loadError: Error | undefined } {
+  const [state, setState] = useState<{ isLoaded: boolean; loadError: Error | undefined }>({
+    isLoaded: !!window.google?.maps?.Map,
+    loadError: undefined,
+  })
+  useEffect(() => {
+    let alive = true
+    loadGoogleMapsScript()
+      .then(() => alive && setState({ isLoaded: true, loadError: undefined }))
+      .catch((loadError) => alive && setState({ isLoaded: false, loadError }))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return state
 }
 
 export function statusPinColor(status: StadiumStatus): string {

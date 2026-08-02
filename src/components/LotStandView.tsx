@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { GoogleMap, useJsApiLoader } from '@react-google-maps/api'
+import { GoogleMap } from '@react-google-maps/api'
 import { trpc } from '@/providers/trpc'
+import { useGoogleMaps } from './LotMap'
 
 /* ------------------------------------------------------------------ */
 /* solar position — same approximation as the server, so the light     */
@@ -88,10 +89,7 @@ interface LotStandViewProps {
 }
 
 export default function LotStandView({ lotName, center, polygon }: LotStandViewProps) {
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
-  })
+  const { isLoaded, loadError } = useGoogleMaps()
 
   const [season, setSeason] = useState<Season>('summer')
   const [minutes, setMinutes] = useState(17 * 60) // 5:00 PM default
