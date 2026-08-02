@@ -8,7 +8,6 @@ import LotMap, {
   type StadiumStatus,
 } from '../components/LotMap'
 import LotSunTerrain from '../components/LotSunTerrain'
-import LotStandView from '../components/LotStandView'
 
 interface LotDetailProps {
   lotName: string
@@ -235,15 +234,6 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
             filterLot={(f) => f.properties.name === p.name}
           />
         </div>
-      )}
-
-      {/* Stand on the lot */}
-      {center && (
-        <LotStandView
-          lotName={p.name}
-          center={center}
-          polygon={lot.geometry ? lot.geometry.coordinates[0] : null}
-        />
       )}
 
       {/* Body */}
