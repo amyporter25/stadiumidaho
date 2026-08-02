@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useGoogleMaps } from './LotMap'
 
 /* ------------------------------------------------------------------ */
 /* solar position — same approximation as the server                   */
@@ -51,23 +50,14 @@ function bearingToCompass(az: number): string {
   return dirs[Math.round(az / 22.5) % 16]
 }
 
-function bearingDeg(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
-  const dLng = (toLng - fromLng) * D2R
-  const y = Math.sin(dLng) * Math.cos(toLat * D2R)
-  const x =
-    Math.cos(fromLat * D2R) * Math.sin(toLat * D2R) -
-    Math.sin(fromLat * D2R) * Math.cos(toLat * D2R) * Math.cos(dLng)
-  return (Math.atan2(y, x) * R2D + 360) % 360
-}
-
 /* ------------------------------------------------------------------ */
 /* viewer                                                              */
 /* ------------------------------------------------------------------ */
 type Season = 'summer' | 'equinox' | 'winter'
-const SEASONS: Record<Season, { month: number; day: number; label: string; tz: number }> = {
-  summer: { month: 5, day: 21, label: 'Summer', tz: -6 },
-  equinox: { month: 2, day: 20, label: 'Spring / Fall', tz: -6 },
-  winter: { month: 11, day: 21, label: 'Winter', tz: -7 },
+const SEASONS: Record<Season, { month: number; day: number; label: string; tz: number; tag: string }> = {
+  summer: { month: 5, day: 21, label: 'Summer', tz: -6, tag: 'the longest day' },
+  equinox: { month: 2, day: 20, label: 'Spring / Fall', tz: -6, tag: 'day and night are equal' },
+  winter: { month: 11, day: 21, label: 'Winter', tz: -7, tag: 'the shortest day' },
 }
 
 interface LotStandViewProps {
@@ -76,17 +66,12 @@ interface LotStandViewProps {
   polygon: number[][] | null
 }
 
-export default function LotStandView({ lotName, center, polygon }: LotStandViewProps) {
-  const { isLoaded, loadError } = useGoogleMaps()
-  const hostRef = useRef<HTMLDivElement>(null)
-  const panoRef = useRef<google.maps.StreetViewPanorama | null>(null)
+export default function LotStandView({ lotName, center }: LotStandViewProps) {
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   const [season, setSeason] = useState<Season>('summer')
   const [minutes, setMinutes] = useState(17 * 60)
-  const [svStatus, setSvStatus] = useState<'loading' | 'found' | 'none'>('loading')
-  const [svNote, setSvNote] = useState<string>('')
 
-  /* ---- sun position ---- */
   const seasonInfo = SEASONS[season]
   const sun = useMemo(() => {
     const year = new Date().getFullYear()
@@ -94,94 +79,14 @@ export default function LotStandView({ lotName, center, polygon }: LotStandViewP
     return sunPosition(utcMs, center.lat, center.lng)
   }, [season, minutes, seasonInfo, center])
   const sunUp = sun.altitude > 0.5
+  const golden =
+    sunUp &&
+    sun.altitude < 35 &&
+    ['W', 'WSW', 'WNW', 'SW', 'NW'].includes(bearingToCompass(sun.azimuth))
 
-  /* ---- candidate stand points: edge of the lot + nearby, toward the lot ---- */
-  const candidates = useMemo(() => {
-    const pts: { lat: number; lng: number }[] = []
-    if (polygon) {
-      // push outward from centroid through each vertex midpoint
-      for (const [lng, lat] of polygon) {
-        const dx = lng - center.lng
-        const dy = lat - center.lat
-        const len = Math.hypot(dx, dy) || 1
-        // ~25m beyond the lot edge
-        pts.push({ lat: lat + (dy / len) * 0.00025, lng: lng + (dx / len) * 0.00025 })
-      }
-    }
-    pts.push(center) // last resort
-    return pts
-  }, [polygon, center])
-
-  /* ---- init Street View once maps are ready ---- */
   useEffect(() => {
-    if (!isLoaded || !hostRef.current) return
-
-    const pano = new google.maps.StreetViewPanorama(hostRef.current, {
-      pov: { heading: 0, pitch: 0 },
-      zoom: 0,
-      addressControl: false,
-      linksControl: true,
-      panControl: true,
-      enableCloseButton: false,
-      fullscreenControl: true,
-      motionTracking: false,
-      motionTrackingControl: false,
-    })
-    panoRef.current = pano
-
-    const service = new google.maps.StreetViewService()
-
-    // try candidate points, widest search first for the closest real panorama
-    let cancelled = false
-    setSvStatus('loading')
-
-    const tryPoint = (idx: number) => {
-      if (cancelled || idx >= candidates.length) {
-        if (!cancelled) {
-          setSvStatus('none')
-          setSvNote('Street View has not photographed this street yet.')
-        }
-        return
-      }
-      service.getPanorama(
-        { location: candidates[idx], radius: 150, preference: google.maps.StreetViewPreference.NEAREST },
-        (data, status) => {
-          if (cancelled) return
-          if (status === google.maps.StreetViewStatus.OK && data?.location?.latLng) {
-            const pos = data.location.latLng
-            pano.setPosition(pos)
-            // face the lot
-            const heading = bearingDeg(pos.lat(), pos.lng(), center.lat, center.lng)
-            pano.setPov({ heading, pitch: 0 })
-            setSvStatus('found')
-            const desc = data.location.description ?? ''
-            const distM = Math.round(
-              Math.hypot(
-                (pos.lat() - center.lat) * 111320,
-                (pos.lng() - center.lng) * 111320 * Math.cos(center.lat * D2R)
-              )
-            )
-            setSvNote(
-              distM > 120
-                ? `Nearest Street View is ~${distM} m away${desc ? ` on ${desc}` : ''} — the lots themselves aren't photographed yet.`
-                : desc
-                  ? `Standing near ${desc}, looking toward Lot ${lotName}.`
-                  : `Looking toward Lot ${lotName}.`
-            )
-          } else {
-            tryPoint(idx + 1)
-          }
-        }
-      )
-    }
-    tryPoint(0)
-
-    return () => {
-      cancelled = true
-      panoRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, lotName])
+    videoRef.current?.play().catch(() => {})
+  }, [])
 
   const sliderLabel = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 
@@ -189,56 +94,44 @@ export default function LotStandView({ lotName, center, polygon }: LotStandViewP
     <div style={{ borderBottom: '1px solid #000000', backgroundColor: '#0b0b0b' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '48px clamp(24px, 4vw, 60px)' }}>
         <p style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>
-          Stand on the lot
+          See the land
         </p>
         <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', marginBottom: '24px', maxWidth: '640px', lineHeight: 1.6 }}>
-          Look around the real surroundings at street level — drag to turn, scroll to zoom, click the
-          road to move. Below, the sun readout shows where the light sits at any time of day.
+          Real drone footage over The Stadium's roads and lots — this is the actual ground
+          around Lot {lotName}, not a rendering. Below, track where the sun sits at any
+          hour of the year.
         </p>
 
-        {/* Street View */}
-        <div style={{ position: 'relative', width: '100%', height: 'clamp(380px, 60vh, 600px)', backgroundColor: '#111' }}>
-          {loadError ? (
-            <Centered>Note: map view unavailable — check the Google Maps key.</Centered>
-          ) : !isLoaded || svStatus === 'loading' ? (
-            <Centered>Finding the nearest street view…</Centered>
-          ) : svStatus === 'none' ? (
-            <Centered>
-              {svNote} Satellite imagery is your best look for now — see the map above.
-            </Centered>
-          ) : null}
-
-          {/* the panorama mounts here; stays mounted but hidden behind status messages */}
+        {/* drone video */}
+        <div style={{ position: 'relative', width: '100%', height: 'clamp(360px, 55vh, 580px)', backgroundColor: '#111', overflow: 'hidden' }}>
+          <video
+            ref={videoRef}
+            src="/videos/stadium-road.mp4"
+            muted
+            loop
+            playsInline
+            controls
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
           <div
-            ref={hostRef}
             style={{
               position: 'absolute',
-              inset: 0,
-              visibility: svStatus === 'found' ? 'visible' : 'hidden',
+              top: '14px',
+              left: '14px',
+              backgroundColor: 'rgba(11,11,11,0.78)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              padding: '10px 14px',
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.85)',
+              letterSpacing: '0.04em',
+              pointerEvents: 'none',
             }}
-          />
-
-          {svStatus === 'found' && svNote && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: '14px',
-                left: '14px',
-                maxWidth: '70%',
-                backgroundColor: 'rgba(11,11,11,0.78)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                padding: '10px 14px',
-                fontSize: '12px',
-                color: 'rgba(255,255,255,0.85)',
-                lineHeight: 1.5,
-              }}
-            >
-              {svNote}
-            </div>
-          )}
+          >
+            Aerial footage · The Stadium, north Caldwell
+          </div>
         </div>
 
-        {/* sun readout */}
+        {/* sun tracker */}
         <div
           style={{
             marginTop: '28px',
@@ -249,25 +142,32 @@ export default function LotStandView({ lotName, center, polygon }: LotStandViewP
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {(Object.keys(SEASONS) as Season[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSeason(s)}
-                  style={{
-                    fontSize: '11px',
-                    letterSpacing: '0.12em',
-                    textTransform: 'uppercase',
-                    padding: '8px 16px',
-                    border: season === s ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.25)',
-                    backgroundColor: season === s ? 'rgba(242,176,74,0.12)' : 'transparent',
-                    color: season === s ? '#f2b04a' : 'rgba(255,255,255,0.7)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {SEASONS[s].label}
-                </button>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <label
+                htmlFor="stand-season"
+                style={{ fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}
+              >
+                Sunlight in
+              </label>
+              <select
+                id="stand-season"
+                value={season}
+                onChange={(e) => setSeason(e.target.value as Season)}
+                style={{
+                  fontSize: '14px',
+                  padding: '9px 14px',
+                  backgroundColor: '#1a1a1a',
+                  color: '#f2b04a',
+                  border: '1px solid #f2b04a',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <option value="summer">Summer (Jun 21)</option>
+                <option value="equinox">Spring / Fall (Mar 20)</option>
+                <option value="winter">Winter (Dec 21)</option>
+              </select>
+              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>— {seasonInfo.tag}</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 280px', maxWidth: '460px' }}>
@@ -297,52 +197,27 @@ export default function LotStandView({ lotName, center, polygon }: LotStandViewP
                 flexShrink: 0,
               }}
             />
-            <p style={{ fontSize: 'clamp(17px, 1.8vw, 22px)', color: '#ffffff', letterSpacing: '-0.01em' }}>
+            <p style={{ fontSize: 'clamp(17px, 1.8vw, 22px)', color: '#ffffff', letterSpacing: '-0.01em', lineHeight: 1.4 }}>
               {sunUp ? (
                 <>
-                  In {SEASONS[season].label.toLowerCase()} at {sliderLabel}, the sun is{' '}
+                  In {seasonInfo.label.toLowerCase()} at {sliderLabel}, the sun is{' '}
                   <strong>{sun.altitude.toFixed(0)}°</strong> up in the{' '}
                   <strong>{bearingToCompass(sun.azimuth)}</strong> sky ({Math.round(sun.azimuth)}°)
-                  {bearingToCompass(sun.azimuth) === 'W' || bearingToCompass(sun.azimuth) === 'WSW' || bearingToCompass(sun.azimuth) === 'WNW' || bearingToCompass(sun.azimuth) === 'SW' || bearingToCompass(sun.azimuth) === 'NW'
-                    ? ' — golden light toward the lot.'
-                    : '.'}
+                  {golden ? ' — golden light toward the lot.' : '.'}
                 </>
               ) : (
-                <>In {SEASONS[season].label.toLowerCase()} at {sliderLabel}, the sun is below the horizon.</>
+                <>In {seasonInfo.label.toLowerCase()} at {sliderLabel}, the sun is below the horizon.</>
               )}
             </p>
           </div>
         </div>
 
         <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '16px', lineHeight: 1.6 }}>
-          Street View shows the nearest real photography to this lot — drag to look in any
-          direction. The new internal streets may not be photographed yet; in that case you'll
-          see the closest existing road. Sun position is calculated for the lot's exact location.
+          Video shot on site at The Stadium. Sun position is calculated for Lot {lotName}'s exact
+          location — ground-level sun angle is what determines morning light on the porch and
+          where the evening sun lands.
         </p>
       </div>
-    </div>
-  )
-}
-
-function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        padding: '0 32px',
-        color: 'rgba(255,255,255,0.45)',
-        fontSize: '13px',
-        letterSpacing: '0.12em',
-        textTransform: 'uppercase',
-        lineHeight: 1.8,
-      }}
-    >
-      {children}
     </div>
   )
 }
