@@ -63,6 +63,23 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
 
   const center = useMemo(() => (lot ? centroid(lot) : null), [lot])
 
+  // neighboring lot polygons for 3D context (how this lot sits among others)
+  const neighbors = useMemo(() => {
+    if (!features || !center || !lot) return []
+    const NEAR_DEG = 0.004 // ~400 m
+    return features
+      .filter((f) => {
+        if (f.properties.name === lotName || !f.geometry) return false
+        const c = centroid(f)
+        return (
+          c &&
+          Math.abs(c.lat - center.lat) < NEAR_DEG &&
+          Math.abs(c.lng - center.lng) < NEAR_DEG
+        )
+      })
+      .map((f) => f.geometry!.coordinates[0])
+  }, [features, lot, lotName, center])
+
   const createInquiry = trpc.inquiry.create.useMutation({
     onSuccess: () => setInquiryStatus('sent'),
   })
@@ -244,6 +261,7 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
           center={center}
           polygon={lot.geometry.coordinates[0]}
           facing={p.facing}
+          neighbors={neighbors}
         />
       )}
 

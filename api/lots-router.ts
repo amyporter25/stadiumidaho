@@ -240,6 +240,73 @@ export const lotsRouter = createRouter({
     }),
 
   /**
+   * Nearby road centrelines (OpenStreetMap via Overpass) for the 3D
+   * visualizer's street ribbon. One shared result for the whole subdivision
+   * area, cached on disk — road geometry barely changes.
+   */
+  roads: publicQuery
+    .input(z.object({ lat: z.number(), lng: z.number() }))
+    .query(async ({ input }) => {
+      const CACHE_FILE = path.join(process.cwd(), "data", "roads.json");
+      const DISK_TTL = 7 * 24 * 3600 * 1000;
+      try {
+        const raw = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as {
+          at: number;
+          roads: { name: string | null; kind: string; points: [number, number][] }[];
+        };
+        if (Date.now() - raw.at < DISK_TTL && raw.roads.length) return raw.roads;
+      } catch {
+        // fall through to fetch
+      }
+
+      const q = `[out:json];way[highway~"^(residential|unclassified|tertiary|secondary|primary|service)$"](around:1200,${input.lat},${input.lng});out geom;`;
+      // the main endpoint blocks some server environments (406); try mirrors
+      const ENDPOINTS = [
+        "https://overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+      ];
+      interface OverpassWay {
+        type: string;
+        tags?: { name?: string; highway?: string };
+        geometry?: { lat: number; lon: number }[];
+      }
+      let json: { elements: OverpassWay[] } | null = null;
+      for (const ep of ENDPOINTS) {
+        try {
+          const res = await fetch(`${ep}?data=${encodeURIComponent(q)}`, {
+            signal: AbortSignal.timeout(25_000),
+          });
+          if (!res.ok) continue;
+          const parsed = (await res.json()) as { elements?: OverpassWay[] };
+          if (parsed?.elements) {
+            json = { elements: parsed.elements };
+            break;
+          }
+        } catch {
+          // try next mirror
+        }
+      }
+      if (!json) throw new Error("All Overpass endpoints failed");
+      const roads = json.elements
+        .filter((e) => e.type === "way" && e.geometry && e.geometry.length >= 2)
+        .map((e) => ({
+          name: e.tags?.name ?? null,
+          kind: e.tags?.highway ?? "road",
+          points: e.geometry!.map(
+            (p) => [p.lat, p.lon] as [number, number]
+          ),
+        }));
+      try {
+        fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+        fs.writeFileSync(CACHE_FILE, JSON.stringify({ at: Date.now(), roads }));
+      } catch {
+        // best-effort
+      }
+      return roads;
+    }),
+
+  /**
    * Compact terrain for the 3D visualizer: origin + evenly-spaced elevation
    * grid (meters) over the lot and ~180 m around it. Uses a coarse grid so a
    * cold fetch completes in seconds; cached server-side for 24h.

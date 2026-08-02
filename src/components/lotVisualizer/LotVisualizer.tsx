@@ -63,11 +63,14 @@ interface LotVisualizerProps {
   center: { lat: number; lng: number }
   polygon: number[][] // [lng,lat][]
   facing: string | null
+  /** neighboring lot polygons ([lng,lat] rings) for context */
+  neighbors?: number[][][]
 }
 
 const EYE_M = 1.7
+const VANTAGE_M = 7.5 // ~25 ft — second-story height above the street
 
-export default function LotVisualizer({ lotName, center, polygon, facing }: LotVisualizerProps) {
+export default function LotVisualizer({ lotName, center, polygon, facing, neighbors = [] }: LotVisualizerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const utils = trpc.useUtils()
 
@@ -97,6 +100,12 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
   // exhausted retry chain (or a manual reset) is a real error.
   const exhausted = terrainQ.isError && (userGaveUp || terrainQ.failureCount >= 10)
   const showError = exhausted || (userGaveUp && !terrainQ.data)
+
+  // street geometry for context (cached server-side; fine if it fails)
+  const roadsQ = trpc.lots.roads.useQuery(
+    { lat: center.lat, lng: center.lng },
+    { staleTime: 24 * 3600 * 1000, retry: 1 }
+  )
   const terrain = terrainQ.data as Terrain | undefined
 
   const [planId, setPlanId] = useState(homePlans[0].id)
@@ -110,6 +119,10 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
   const buildable = useMemo(() => insetRing(lotRing, 6 * FT_TO_M * 4), [lotRing]) // ~24ft setback
   const frontMid = useMemo(() => frontEdgeMidpoint(lotRing, facing), [lotRing, facing])
   const defaultPad = useMemo(() => ringCentroid(buildable), [buildable])
+  const neighborRings = useMemo(
+    () => neighbors.map((n) => ringToLocal(n, frame)),
+    [neighbors, frame]
+  )
 
   // sun for lighting
   const seasonInfo = SEASONS[season]
@@ -133,10 +146,12 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     dragging: boolean
     mode: 'walk' | 'moveHouse'
     groundAt: (x: number, z: number) => number
+    setCamMode: (m: 'vantage' | 'walk') => void
   } | null>(null)
 
   const [ready, setReady] = useState(false)
   const [mode, setMode] = useState<'walk' | 'moveHouse'>('walk')
+  const [camView, setCamView] = useState<'vantage' | 'walk'>('vantage')
   const [imageryOn, setImageryOn] = useState(false)
 
   useEffect(() => {
@@ -252,6 +267,40 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     )
     scene.add(bMesh)
 
+    /* ---- neighboring lot boundaries (context — how this lot sits) ---- */
+    for (const nRing of neighborRings) {
+      if (nRing.length < 3) continue
+      const pts = nRing.map(([x, z]) => new THREE.Vector3(x, groundAt(x, z) + 0.18, z))
+      pts.push(pts[0].clone())
+      scene.add(
+        new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(pts),
+          new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28 })
+        )
+      )
+    }
+
+    /* ---- street ribbon from OSM centrelines ---- */
+    const roads = roadsQ.data ?? []
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x3d3d40, roughness: 0.95 })
+    for (const road of roads) {
+      const pts = road.points.map(([la, ln]) => frame.toLocal(la, ln))
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const [ax, az] = pts[i]
+        const [bx, bz] = pts[i + 1]
+        // skip segments far outside the terrain grid
+        const mx = (ax + bx) / 2, mz = (az + bz) / 2
+        if (Math.abs(mx) > 400 || Math.abs(mz) > 400) continue
+        const len = Math.hypot(bx - ax, bz - az)
+        if (len < 0.5) continue
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(9, 0.12, len), roadMat)
+        seg.position.set(mx, groundAt(mx, mz) + 0.08, mz)
+        seg.rotation.y = Math.atan2(bx - ax, bz - az)
+        seg.receiveShadow = true
+        scene.add(seg)
+      }
+    }
+
     /* ---- house anchor ---- */
     const houseAnchor = new THREE.Group()
     scene.add(houseAnchor)
@@ -278,23 +327,48 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     const hemi = new THREE.HemisphereLight(0xbdd2e8, 0x6a5f4c, 0.9)
     scene.add(hemi)
 
-    /* ---- starting camera: on the street, eye height, facing the lot ---- */
+    /* ---- starting camera: the "lot vantage" — about second-story height
+     * on the street, looking DOWN onto the lot so its shape and slope read
+     * at a glance. Walk mode drops to eye level. ---- */
     const [fx, fz] = frontMid
-    // lot centroid is the frame origin (0, 0) in scene coords
-    const ccx = 0, ccz = 0
-    // stand a few meters outside the lot on the street side
+    const ccx = 0, ccz = 0 // lot centroid is the frame origin in scene coords
+    // stand outside the lot on the street side
     const dirX = fx - ccx, dirZ = fz - ccz
     const dLen = Math.hypot(dirX, dirZ) || 1
-    const camX = fx + (dirX / dLen) * 6
-    const camZ = fz + (dirZ / dLen) * 6
-    camera.position.set(camX, groundAt(camX, camZ) + EYE_M, camZ)
-    camera.lookAt(ccx, groundAt(ccx, ccz) + EYE_M * 0.7, ccz)
+    const camX = fx + (dirX / dLen) * 10
+    const camZ = fz + (dirZ / dLen) * 10
+    const groundYAtCam = groundAt(camX, camZ)
+
+    camera.position.set(camX, groundYAtCam + VANTAGE_M, camZ)
+    camera.lookAt(ccx, groundAt(ccx, ccz) + 2, ccz)
+
+    // camera control state
+    let camMode: 'vantage' | 'walk' = 'vantage'
+    let orbitT = Math.atan2(camX - ccx, camZ - ccz) // angle around the lot
+    let orbitR = Math.hypot(camX - ccx, camZ - ccz) + 20 // distance from centroid
+    let orbitH = VANTAGE_M // height above the street-side ground
+    let yaw = Math.atan2(ccx - camX, ccz - camZ)
+    let pitch = -Math.atan2(VANTAGE_M - 2, orbitR) // looking down at the lot
+
+    const setCamMode = (m: 'vantage' | 'walk') => {
+      camMode = m
+      if (m === 'walk') {
+        // drop to eye level where we are; yaw/pitch stay continuous
+        camera.position.y = groundAt(camera.position.x, camera.position.z) + EYE_M
+      } else {
+        // re-frame on the lot from the current horizontal position
+        orbitT = Math.atan2(camera.position.x - ccx, camera.position.z - ccz)
+        orbitR = Math.hypot(camera.position.x - ccx, camera.position.z - ccz)
+        orbitH = VANTAGE_M
+      }
+    }
 
     sceneRef.current = {
       renderer, scene, camera, houseAnchor, driveway,
       sun: sunLight, hemi, rayGround,
       keys: {}, dragging: false, mode: 'walk',
       groundAt,
+      setCamMode,
     }
 
     /* ---- input ---- */
@@ -309,8 +383,6 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     const raycaster = new THREE.Raycaster()
     const ndc = new THREE.Vector2()
     let lastX = 0, lastY = 0
-    let yaw = Math.atan2(ccx - camX, ccz - camZ)
-    let pitch = -0.05
 
     const onDown = (e: PointerEvent) => {
       if (!sceneRef.current) return
@@ -327,8 +399,14 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
       const dy = e.clientY - lastY
       lastX = e.clientX; lastY = e.clientY
       if (s.mode === 'walk' && e.buttons) {
-        yaw -= dx * 0.004
-        pitch = Math.max(-1.2, Math.min(1.2, pitch - dy * 0.003))
+        if (camMode === 'vantage') {
+          // orbit around the lot / tilt up-down; wheel-less zoom via vertical drag
+          orbitT -= dx * 0.005
+          orbitH = Math.max(2.5, Math.min(60, orbitH + dy * 0.08))
+        } else {
+          yaw -= dx * 0.004
+          pitch = Math.max(-1.2, Math.min(1.2, pitch - dy * 0.003))
+        }
       } else if (s.mode === 'moveHouse' && s.dragging) {
         // pointer coords are viewport-relative; NDC must be canvas-relative
         const rect = renderer.domElement.getBoundingClientRect()
@@ -352,6 +430,15 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     renderer.domElement.addEventListener('pointermove', onMove)
     renderer.domElement.addEventListener('pointerup', onUp)
 
+    // wheel: dolly in/out in vantage, gentle height in walk
+    const onWheel = (e: WheelEvent) => {
+      if (camMode === 'vantage') {
+        e.preventDefault()
+        orbitR = Math.max(25, Math.min(400, orbitR * (1 + Math.sign(e.deltaY) * 0.08)))
+      }
+    }
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false })
+
     /* ---- resize ---- */
     const onResize = () => {
       const w = host.clientWidth, h = host.clientHeight
@@ -369,25 +456,44 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
       const s = sceneRef.current
       if (s) {
         const dt = Math.min(clock.getDelta(), 0.05)
-        // walk movement (WASD / arrows) in the camera's facing direction
-        const sp = 8 * dt
         const k = s.keys
-        const fwd = (k['w'] || k['arrowup'] ? 1 : 0) - (k['s'] || k['arrowdown'] ? 1 : 0)
-        const strafe = (k['d'] || k['arrowright'] ? 1 : 0) - (k['a'] || k['arrowleft'] ? 1 : 0)
-        if (s.mode === 'walk' && (fwd || strafe)) {
-          const sin = Math.sin(yaw), cos = Math.cos(yaw)
-          s.camera.position.x += (sin * fwd + cos * strafe) * sp
-          s.camera.position.z += (cos * fwd - sin * strafe) * sp
-        }
-        // keep camera at eye height above ground (sample nearest grid)
-        const groundY = groundAt(s.camera.position.x, s.camera.position.z)
-        s.camera.position.y += ((groundY + EYE_M) - s.camera.position.y) * 0.3
 
-        // look direction
-        const lookX = s.camera.position.x + Math.sin(yaw) * Math.cos(pitch)
-        const lookY = s.camera.position.y + Math.sin(pitch)
-        const lookZ = s.camera.position.z + Math.cos(yaw) * Math.cos(pitch)
-        s.camera.lookAt(lookX, lookY, lookZ)
+        if (camMode === 'vantage') {
+          // orbital camera: WASD dollies/raises, drag orbits
+          const sp = 12 * dt
+          const dolly = (k['s'] || k['arrowdown'] ? 1 : 0) - (k['w'] || k['arrowup'] ? 1 : 0)
+          const lift = (k['d'] || k['arrowright'] ? 1 : 0) - (k['a'] || k['arrowleft'] ? 1 : 0)
+          orbitR = Math.max(25, Math.min(400, orbitR + dolly * sp * 3))
+          orbitH = Math.max(2.5, Math.min(60, orbitH + lift * sp))
+          const gx = ccx + Math.sin(orbitT) * orbitR
+          const gz = ccz + Math.cos(orbitT) * orbitR
+          const gy = Math.max(groundAt(gx, gz) + 1.2, groundAt(ccx, ccz) + orbitH)
+          s.camera.position.x += (gx - s.camera.position.x) * 0.15
+          s.camera.position.z += (gz - s.camera.position.z) * 0.15
+          s.camera.position.y += (gy - s.camera.position.y) * 0.15
+          s.camera.lookAt(ccx, groundAt(ccx, ccz) + 2, ccz)
+          // keep yaw/pitch in sync for a smooth drop into walk mode
+          yaw = Math.atan2(ccx - s.camera.position.x, ccz - s.camera.position.z)
+          pitch = -Math.atan2(s.camera.position.y - (groundAt(ccx, ccz) + 2), Math.hypot(ccx - s.camera.position.x, ccz - s.camera.position.z))
+        } else {
+          // walk movement (WASD / arrows) in the camera's facing direction
+          const sp = 8 * dt
+          const fwd = (k['w'] || k['arrowup'] ? 1 : 0) - (k['s'] || k['arrowdown'] ? 1 : 0)
+          const strafe = (k['d'] || k['arrowright'] ? 1 : 0) - (k['a'] || k['arrowleft'] ? 1 : 0)
+          if (s.mode === 'walk' && (fwd || strafe)) {
+            const sin = Math.sin(yaw), cos = Math.cos(yaw)
+            s.camera.position.x += (sin * fwd + cos * strafe) * sp
+            s.camera.position.z += (cos * fwd - sin * strafe) * sp
+          }
+          // keep camera at eye height above ground (sample nearest grid)
+          const groundY = groundAt(s.camera.position.x, s.camera.position.z)
+          s.camera.position.y += ((groundY + EYE_M) - s.camera.position.y) * 0.3
+          // look direction
+          const lookX = s.camera.position.x + Math.sin(yaw) * Math.cos(pitch)
+          const lookY = s.camera.position.y + Math.sin(pitch)
+          const lookZ = s.camera.position.z + Math.cos(yaw) * Math.cos(pitch)
+          s.camera.lookAt(lookX, lookY, lookZ)
+        }
 
         // driveway from street front to house front
         const hx = s.houseAnchor.position.x, hz = s.houseAnchor.position.z
@@ -416,6 +522,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
       window.removeEventListener('keydown', kd)
       window.removeEventListener('keyup', ku)
       ro.disconnect()
+      renderer.domElement.removeEventListener('wheel', onWheel)
       renderer.dispose()
       host.removeChild(renderer.domElement)
       sceneRef.current = null
@@ -474,6 +581,11 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     if (sceneRef.current) sceneRef.current.mode = mode
   }, [mode])
 
+  /* ---- camera view sync ---- */
+  useEffect(() => {
+    if (ready) sceneRef.current?.setCamMode(camView)
+  }, [camView, ready])
+
   const sliderLabel = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   const fp = houseFootprint(planId)
   const plan = homePlans.find((p) => p.id === planId)
@@ -485,9 +597,10 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
           Visualize your build · Lot {lotName}
         </p>
         <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', marginBottom: '24px', maxWidth: '680px', lineHeight: 1.6 }}>
-          Stand on the street in front of Lot {lotName}. Drag to look around, use W A S D to walk.
-          Switch to <em>Move house</em> to drag the home where you want it — the driveway and its
-          length update as you do. Move the sun to see real shadows.
+          See how Lot {lotName} sits — from the street, looking down over it, with its
+          neighbors and roads around it. Drag to circle the lot, scroll to move in or out,
+          then drop to <em>Street level</em> to walk it. Switch to <em>Move house</em> to place
+          the home where you want it. Move the sun to see real shadows.
         </p>
 
         {/* viewport */}
@@ -528,6 +641,25 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
 
           {ready && (
             <>
+              {/* camera view toggle */}
+              <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', gap: 8 }}>
+                {(['vantage', 'walk'] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setCamView(v)}
+                    style={{
+                      fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase',
+                      padding: '9px 16px',
+                      border: camView === v ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.3)',
+                      backgroundColor: camView === v ? 'rgba(242,176,74,0.15)' : 'rgba(11,11,11,0.6)',
+                      color: camView === v ? '#f2b04a' : 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                    }}
+                  >
+                    {v === 'vantage' ? 'Lot vantage' : 'Street level'}
+                  </button>
+                ))}
+              </div>
+
               {/* mode toggle */}
               <div style={{ position: 'absolute', top: 14, left: 14, display: 'flex', gap: 8 }}>
                 {(['walk', 'moveHouse'] as const).map((m) => (
@@ -542,7 +674,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
                       color: mode === m ? '#f2b04a' : 'rgba(255,255,255,0.8)', cursor: 'pointer',
                     }}
                   >
-                    {m === 'walk' ? 'Walk & look' : 'Move house'}
+                    {m === 'walk' ? 'Look around' : 'Move house'}
                   </button>
                 ))}
               </div>
@@ -629,9 +761,10 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
           <div>
             <p style={{ fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: '10px' }}>How to explore</p>
             <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.8 }}>
-              <li><strong>Drag</strong> to look around</li>
-              <li><strong>W A S D / arrows</strong> to walk</li>
-              <li><strong>Move house</strong> mode: drag the home on the lot</li>
+              <li><strong>Drag</strong> to circle the lot &amp; raise/lower the view</li>
+              <li><strong>Scroll</strong> to move closer or pull back</li>
+              <li><strong>Street level</strong>: W A S D to walk the lot</li>
+              <li><strong>Move house</strong>: drag the home on the lot</li>
               <li>Slide the sun to see shadows at golden hour</li>
             </ul>
           </div>
