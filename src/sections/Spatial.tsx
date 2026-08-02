@@ -32,7 +32,16 @@ export default function Spatial() {
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    video.play().catch(() => {})
+    const tryPlay = () => video.play().catch(() => {})
+    tryPlay()
+    // if autoplay is blocked, play on first user interaction
+    const onInteract = () => tryPlay()
+    window.addEventListener('pointerdown', onInteract, { once: true })
+    window.addEventListener('scroll', onInteract, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', onInteract)
+      window.removeEventListener('scroll', onInteract)
+    }
   }, [])
 
   return (
@@ -51,9 +60,12 @@ export default function Spatial() {
       <video
         ref={videoRef}
         src="/videos/stadium-road.mp4"
+        poster="/videos/stadium-poster.jpg"
+        autoPlay
         muted
         loop
         playsInline
+        preload="auto"
         style={{
           position: 'absolute',
           top: 0,

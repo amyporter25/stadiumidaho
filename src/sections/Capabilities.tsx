@@ -36,9 +36,12 @@ export default function Capabilities() {
       <video
         ref={videoRef}
         src="/videos/stadium-road.mp4#t=4"
+        poster="/videos/stadium-poster.jpg"
+        autoPlay
         muted
         loop
         playsInline
+        preload="auto"
         style={{
           position: 'absolute',
           top: 0,

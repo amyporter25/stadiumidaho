@@ -107,10 +107,13 @@ export default function LotStandView({ lotName, center }: LotStandViewProps) {
           <video
             ref={videoRef}
             src="/videos/stadium-road.mp4"
+            poster="/videos/stadium-poster.jpg"
+            autoPlay
             muted
             loop
             playsInline
             controls
+            preload="auto"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
           <div
