@@ -69,19 +69,34 @@ const EYE_M = 1.7
 
 export default function LotVisualizer({ lotName, center, polygon, facing }: LotVisualizerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const utils = trpc.useUtils()
 
-  // A cold terrain build can take ~20-40s server-side (DEM fetch). The first
-  // attempt may die on a proxy timeout while the server keeps working, so
-  // retry several times — later attempts join the in-flight build or hit a
-  // warm cache and return in milliseconds.
+  // A cold terrain build can take ~20-60s server-side. Requests may die on
+  // proxy timeouts or transient network drops while the server keeps
+  // building, so retry generously — later attempts join the in-flight
+  // build or hit a warm cache and return in milliseconds. Automatic retries
+  // are suppressed once the user clicks "Try again" (manual retries instead).
+  const [userGaveUp, setUserGaveUp] = useState(false)
+  // a 3D view that succeeded for a lot once stays in the shared cache for 24h
+  // (staleTime below) — resetQuery wipes it, which would force a needless
+  // rebuild on next visit; refetch does not.
+  const retryTerrain = () => {
+    void utils.lots.terrain3d.reset({ lotName })
+  }
+  useEffect(() => { setUserGaveUp(false) }, [lotName])
   const terrainQ = trpc.lots.terrain3d.useQuery(
     { lotName },
     {
       staleTime: 24 * 3600 * 1000,
-      retry: 4,
-      retryDelay: (attempt) => Math.min(2000 * (attempt + 1), 8000),
+      retry: (failureCount) => !userGaveUp && failureCount < 10,
+      retryDelay: (attempt) => Math.min(3000 * (attempt + 1), 12000),
     }
   )
+  // While retries are still queued the query sits in error state with more
+  // attempts coming — show that as "working", not failure. Only a fully
+  // exhausted retry chain (or a manual reset) is a real error.
+  const exhausted = terrainQ.isError && (userGaveUp || terrainQ.failureCount >= 10)
+  const showError = exhausted || (userGaveUp && !terrainQ.data)
   const terrain = terrainQ.data as Terrain | undefined
 
   const [planId, setPlanId] = useState(homePlans[0].id)
@@ -477,19 +492,27 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
 
         {/* viewport */}
         <div style={{ position: 'relative', width: '100%', height: 'clamp(420px, 62vh, 620px)', backgroundColor: '#111' }}>
-          {terrainQ.isLoading && (
+          {!showError && !terrainQ.data && (
             <CenteredNote>
               Building the lot in 3D…
               <span style={{ display: 'block', marginTop: '8px', letterSpacing: '0.04em', textTransform: 'none' }}>
                 First build fetches real elevation data — can take up to a minute.
               </span>
+              {terrainQ.isError && terrainQ.failureCount > 0 && (
+                <span style={{ display: 'block', marginTop: '8px', letterSpacing: '0.04em', textTransform: 'none', color: 'rgba(255,255,255,0.35)' }}>
+                  Still working{terrainQ.failureCount > 1 ? ` (attempt ${terrainQ.failureCount + 1})` : ''} — it appears on its own when ready.
+                </span>
+              )}
             </CenteredNote>
           )}
-          {terrainQ.isError && (
+          {showError && !terrainQ.data && (
             <CenteredNote>
-              3D view is taking longer than usual.
+              3D view couldn't load for this lot.
+              <span style={{ display: 'block', marginTop: '8px', letterSpacing: '0.04em', textTransform: 'none' }}>
+                The elevation service may be busy — try again, or check back in a few minutes.
+              </span>
               <button
-                onClick={() => terrainQ.refetch()}
+                onClick={() => { setUserGaveUp(false); retryTerrain() }}
                 style={{
                   display: 'block', margin: '16px auto 0', padding: '10px 22px',
                   fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase',
