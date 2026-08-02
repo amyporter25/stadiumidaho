@@ -219,9 +219,6 @@ export default function LotMap({
     <div style={{ position: 'relative', width: '100%', height }}>
       <GoogleMap
         mapContainerStyle={{ width: '100%', height: '100%' }}
-        center={center}
-        zoom={zoom}
-        tilt={tilt ? 45 : 0}
         onLoad={handleLoad}
         options={{
           mapTypeId: 'hybrid',
@@ -232,6 +229,9 @@ export default function LotMap({
           gestureHandling: 'greedy',
           scrollwheel: true,
           styles: DARK_STYLES,
+          center,
+          zoom,
+          tilt: tilt ? 45 : 0,
         }}
       />
 

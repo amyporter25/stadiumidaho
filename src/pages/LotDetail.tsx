@@ -7,6 +7,8 @@ import LotMap, {
   type StadiumLotFeature,
   type StadiumStatus,
 } from '../components/LotMap'
+import LotSunTerrain from '../components/LotSunTerrain'
+import LotStandView from '../components/LotStandView'
 
 interface LotDetailProps {
   lotName: string
@@ -235,6 +237,15 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
         </div>
       )}
 
+      {/* Stand on the lot */}
+      {center && (
+        <LotStandView
+          lotName={p.name}
+          center={center}
+          polygon={lot.geometry ? lot.geometry.coordinates[0] : null}
+        />
+      )}
+
       {/* Body */}
       <div
         style={{
@@ -334,6 +345,8 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
               ))}
             </ul>
           </div>
+
+          <LotSunTerrain lotName={p.name} />
         </div>
 
         {/* Right: panel */}

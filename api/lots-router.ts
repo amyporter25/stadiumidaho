@@ -1,4 +1,6 @@
+import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
+import { analyzeLot } from "./lot-analysis";
 
 /**
  * Live lot data from Groove's public v3 widget bundle.
@@ -144,4 +146,17 @@ export const lotsRouter = createRouter({
     const features = await fetchLiveLots();
     return { features, fetchedAt: cache?.fetchedAt ?? Date.now() };
   }),
+
+  /**
+   * Terrain + sun analysis for one lot. Uses the cached Groove polygon as
+   * the lot boundary; results are cached server-side for 24h.
+   */
+  analysis: publicQuery
+    .input(z.object({ lotName: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const features = await fetchLiveLots();
+      const lot = features.find((f) => f.properties.name === input.lotName);
+      if (!lot?.geometry) throw new Error(`Lot ${input.lotName} not found`);
+      return analyzeLot(input.lotName, lot.geometry.coordinates[0]);
+    }),
 });
