@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
-import { loadStadiumLots } from '../components/LotMap'
+import { useStadiumLots } from '../components/LotMap'
 
 const vertexShader = `
 varying vec2 vUv;
@@ -71,24 +71,17 @@ export default function Hero() {
 
   const { user } = useAuth()
 
-  const [lotOptions, setLotOptions] = useState<string[]>([])
-  useEffect(() => {
-    loadStadiumLots()
-      .then((features) => {
-        const names = features
-          .filter((f) => f.geometry)
-          .map((f) => {
-            const p = f.properties
-            return p.phase ? `Lot ${p.name} — ${p.phase}` : `Lot ${p.name}`
-          })
-          .sort((a, b) => {
-            const num = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
-            return num(a) - num(b)
-          })
-        setLotOptions(names)
-      })
-      .catch(() => setLotOptions([]))
-  }, [])
+  const lotFeatures = useStadiumLots()
+  const lotOptions = (lotFeatures ?? [])
+    .filter((f) => f.geometry)
+    .map((f) => {
+      const p = f.properties
+      return p.phase ? `Lot ${p.name} — ${p.phase}` : `Lot ${p.name}`
+    })
+    .sort((a, b) => {
+      const num = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
+      return num(a) - num(b)
+    })
 
   // Pre-fill name and email from authenticated user
   useEffect(() => {

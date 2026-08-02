@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GoogleMap, useJsApiLoader } from '@react-google-maps/api'
+import { trpc } from '@/providers/trpc'
 import { community } from '../data/lots'
 
 export type StadiumStatus = 'Available' | 'Under Contract' | 'Sold' | 'Coming Soon'
@@ -69,6 +70,26 @@ export function loadStadiumLots(): Promise<StadiumLotFeature[]> {
   return geojsonPromise
 }
 
+/**
+ * Lot polygons + statuses, preferring the live server feed (refreshed from
+ * Groove every few hours) and falling back to the baked-in snapshot so the
+ * map never breaks if the upstream feed changes.
+ */
+export function useStadiumLots(): StadiumLotFeature[] | null {
+  const [snapshot, setSnapshot] = useState<StadiumLotFeature[] | null>(null)
+  useEffect(() => {
+    loadStadiumLots()
+      .then(setSnapshot)
+      .catch(() => {})
+  }, [])
+  const live = trpc.lots.live.useQuery(undefined, {
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  })
+  const liveFeatures = live.data?.features as StadiumLotFeature[] | undefined
+  return liveFeatures && liveFeatures.length > 0 ? liveFeatures : snapshot
+}
+
 export default function LotMap({
   onSelectLot,
   selectedLotName = null,
@@ -81,14 +102,10 @@ export default function LotMap({
 }: StadiumLotMapProps) {
   const { isLoaded, loadError } = useGoogleMaps()
   const mapRef = useRef<google.maps.Map | null>(null)
-  const [features, setFeatures] = useState<StadiumLotFeature[] | null>(null)
+  const features = useStadiumLots()
   const [hovered, setHovered] = useState<string | null>(null)
   const hoveredRef = useRef<string | null>(null)
   const selectedRef = useRef<string | null>(selectedLotName)
-
-  useEffect(() => {
-    loadStadiumLots().then(setFeatures)
-  }, [])
 
   useEffect(() => {
     selectedRef.current = selectedLotName
@@ -212,6 +229,8 @@ export default function LotMap({
           streetViewControl: false,
           fullscreenControl: true,
           rotateControl: true,
+          gestureHandling: 'greedy',
+          scrollwheel: true,
           styles: DARK_STYLES,
         }}
       />

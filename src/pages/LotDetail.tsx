@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { trpc } from '@/providers/trpc'
 import { useAuth } from '@/hooks/useAuth'
 import LotMap, {
-  loadStadiumLots,
+  useStadiumLots,
   statusPinColor,
   type StadiumLotFeature,
   type StadiumStatus,
@@ -49,14 +49,10 @@ function fmtPrice(price: number | null): string {
 }
 
 export default function LotDetail({ lotName, onBack }: LotDetailProps) {
-  const [features, setFeatures] = useState<StadiumLotFeature[] | null>(null)
+  const features = useStadiumLots()
   const [hovered, setHovered] = useState(false)
   const [inquiryStatus, setInquiryStatus] = useState<'idle' | 'sent'>('idle')
   const { user, isLoading: authLoading } = useAuth()
-
-  useEffect(() => {
-    loadStadiumLots().then(setFeatures)
-  }, [])
 
   const lot = useMemo(
     () => features?.find((f) => f.properties.name === lotName) ?? null,

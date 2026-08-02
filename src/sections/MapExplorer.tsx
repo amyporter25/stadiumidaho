@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import LotMap, { loadStadiumLots, type StadiumLotFeature } from '../components/LotMap'
+import LotMap, { useStadiumLots } from '../components/LotMap'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -12,23 +12,17 @@ interface MapExplorerProps {
 export default function MapExplorer({ onSelectLot }: MapExplorerProps) {
   const sectionRef = useRef<HTMLElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
-  const [stats, setStats] = useState<{ available: number; from: number | null }>({
-    available: 0,
-    from: null,
-  })
-
-  useEffect(() => {
-    loadStadiumLots().then((features: StadiumLotFeature[]) => {
-      const available = features.filter((f) => f.properties.status === 'Available')
-      const prices = available
-        .map((f) => f.properties.price)
-        .filter((p): p is number => typeof p === 'number')
-      setStats({
-        available: available.length,
-        from: prices.length ? Math.min(...prices) : null,
-      })
-    })
-  }, [])
+  const features = useStadiumLots()
+  const stats = useMemo(() => {
+    const available = (features ?? []).filter((f) => f.properties.status === 'Available')
+    const prices = available
+      .map((f) => f.properties.price)
+      .filter((p): p is number => typeof p === 'number')
+    return {
+      available: available.length,
+      from: prices.length ? Math.min(...prices) : null,
+    }
+  }, [features])
 
   useEffect(() => {
     const section = sectionRef.current
