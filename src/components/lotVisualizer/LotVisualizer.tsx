@@ -13,6 +13,7 @@ import {
   type LocalFrame,
 } from './geo'
 import { buildHouse, houseFootprint } from './houses'
+import { loadAerialTexture, aerialUV } from './imagery'
 
 /* ------------------------------------------------------------------ */
 /* solar (same approximation as the rest of the app)                   */
@@ -121,6 +122,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
 
   const [ready, setReady] = useState(false)
   const [mode, setMode] = useState<'walk' | 'moveHouse'>('walk')
+  const [imageryOn, setImageryOn] = useState(false)
 
   useEffect(() => {
     if (!terrain || !hostRef.current) return
@@ -177,6 +179,33 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     const ground = new THREE.Mesh(geoT, groundMat)
     ground.receiveShadow = true
     scene.add(ground)
+
+    /* ---- drape real aerial photography over the terrain (async) ---- */
+    const gridBbox = {
+      south: terrain.originLat,
+      west: terrain.originLng,
+      north: terrain.originLat + (rows - 1) * terrain.latStep,
+      east: terrain.originLng + (cols - 1) * terrain.lngStep,
+    }
+    let cancelled = false
+    void loadAerialTexture(gridBbox).then((aerial) => {
+      if (!aerial || cancelled) return
+      const uv = geoT.attributes.uv as THREE.BufferAttribute
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c
+          const lat = terrain.originLat + r * terrain.latStep
+          const lng = terrain.originLng + c * terrain.lngStep
+          const [u, v] = aerialUV(lat, lng, aerial.bbox)
+          uv.setXY(i, u, v)
+        }
+      }
+      uv.needsUpdate = true
+      groundMat.map = aerial.texture
+      groundMat.color.set(0xffffff) // neutral — let the photo show through
+      groundMat.needsUpdate = true
+      setImageryOn(true)
+    })
 
     // invisible larger ray target for house dragging
     const rayGround = new THREE.Mesh(
@@ -367,6 +396,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
     setReady(true)
 
     return () => {
+      cancelled = true
       cancelAnimationFrame(raf)
       window.removeEventListener('keydown', kd)
       window.removeEventListener('keyup', ku)
@@ -375,6 +405,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
       host.removeChild(renderer.domElement)
       sceneRef.current = null
       setReady(false)
+      setImageryOn(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terrain, lotRing, buildable, frontMid, frame])
@@ -501,6 +532,17 @@ export default function LotVisualizer({ lotName, center, polygon, facing }: LotV
               }}>
                 Driveway ≈ {Math.round(drivewayM / FT_TO_M)} ft
               </div>
+
+              {/* imagery attribution */}
+              {imageryOn && (
+                <div style={{
+                  position: 'absolute', bottom: 14, left: 14,
+                  fontSize: '10px', color: 'rgba(255,255,255,0.55)',
+                  backgroundColor: 'rgba(11,11,11,0.45)', padding: '4px 8px',
+                }}>
+                  Imagery © Esri, Maxar, Earthstar Geographics
+                </div>
+              )}
             </>
           )}
         </div>
