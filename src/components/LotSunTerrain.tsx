@@ -360,7 +360,7 @@ export default function LotSunTerrain({ lotName }: { lotName: string }) {
           </div>
 
           <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', lineHeight: 1.6 }}>
-            Estimates from USGS/SRTM elevation data (≈10 m sample grid) and standard solar
+            Estimates from USGS/SRTM elevation data (≈20 m sample grid) and standard solar
             geometry. Tree and building shade aren't modeled; earthwork is a planning
             estimate, not a bid — confirm with a site survey and your builder.
           </p>

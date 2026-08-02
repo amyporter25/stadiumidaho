@@ -33,8 +33,24 @@ function App() {
     return () => cancelAnimationFrame(rafId)
   }, [])
 
-  const handleSelectLot = (name: string) => setCurrentLotName(name)
+  // Deep-link support: #lot=2/1 opens that lot's page directly, so lot pages
+  // can be shared. Anchor hashes (#map, #plans, …) are unaffected.
+  useEffect(() => {
+    const fromHash = () => {
+      const m = window.location.hash.match(/^#lot=(.+)$/)
+      setCurrentLotName(m ? decodeURIComponent(m[1]) : null)
+    }
+    fromHash()
+    window.addEventListener('hashchange', fromHash)
+    return () => window.removeEventListener('hashchange', fromHash)
+  }, [])
+
+  const handleSelectLot = (name: string) => {
+    window.location.hash = `lot=${encodeURIComponent(name)}`
+    setCurrentLotName(name)
+  }
   const handleBack = () => {
+    history.replaceState(null, '', window.location.pathname)
     setCurrentLotName(null)
     setTimeout(() => {
       document.querySelector('#map')?.scrollIntoView({ behavior: 'auto' })

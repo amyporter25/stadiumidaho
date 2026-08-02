@@ -8,6 +8,7 @@ import LotMap, {
   type StadiumStatus,
 } from '../components/LotMap'
 import LotSunTerrain from '../components/LotSunTerrain'
+import LotVisualizer from '../components/lotVisualizer/LotVisualizer'
 
 interface LotDetailProps {
   lotName: string
@@ -234,6 +235,16 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
             filterLot={(f) => f.properties.name === p.name}
           />
         </div>
+      )}
+
+      {/* 3D visualizer — only for lots that can be built on */}
+      {center && lot.geometry && p.status === 'Available' && (
+        <LotVisualizer
+          lotName={p.name}
+          center={center}
+          polygon={lot.geometry.coordinates[0]}
+          facing={p.facing}
+        />
       )}
 
       {/* Body */}

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { analyzeLot } from "./lot-analysis";
+import { analyzeLot, fetchTerrainGrid3D } from "./lot-analysis";
 
 /**
  * Live lot data from Groove's public v3 widget bundle.
@@ -118,9 +118,11 @@ async function fetchLiveLots(): Promise<StadiumLotFeature[]> {
   if (inflight) return inflight;
 
   inflight = (async () => {
+    // Groove's endpoint can take 20-30s to respond when it's regenerating
+    // the bundle, so allow a generous window before declaring it dead.
     const res = await fetch(WIDGET_URL, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) throw new Error(`Groove widget fetch failed: ${res.status}`);
     const json = (await res.json()) as {
@@ -158,5 +160,19 @@ export const lotsRouter = createRouter({
       const lot = features.find((f) => f.properties.name === input.lotName);
       if (!lot?.geometry) throw new Error(`Lot ${input.lotName} not found`);
       return analyzeLot(input.lotName, lot.geometry.coordinates[0]);
+    }),
+
+  /**
+   * Compact terrain for the 3D visualizer: origin + evenly-spaced elevation
+   * grid (meters) over the lot and ~180 m around it. Uses a coarse grid so a
+   * cold fetch completes in seconds; cached server-side for 24h.
+   */
+  terrain3d: publicQuery
+    .input(z.object({ lotName: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const features = await fetchLiveLots();
+      const lot = features.find((f) => f.properties.name === input.lotName);
+      if (!lot?.geometry) throw new Error(`Lot ${input.lotName} not found`);
+      return fetchTerrainGrid3D(input.lotName, lot.geometry.coordinates[0]);
     }),
 });

@@ -176,7 +176,8 @@ export function buildGridSpec(
 }
 
 async function fetchElevations(
-  points: { lat: number; lng: number }[]
+  points: { lat: number; lng: number }[],
+  sleepMs = 1200
 ): Promise<number[]> {
   const DATASETS = ["mapzen", "aster30m", "srtm30m"];
   const CHUNK = 90;
@@ -203,7 +204,7 @@ async function fetchElevations(
         }
         // be polite to the free API between chunks
         if (i + CHUNK < points.length)
-          await new Promise((r) => setTimeout(r, 1200));
+          await new Promise((r) => setTimeout(r, sleepMs));
       }
       return out;
     } catch {
@@ -428,6 +429,38 @@ function computeDaySun(
 const analysisCache = new Map<string, { at: number; data: LotAnalysis }>();
 const CACHE_TTL = 24 * 3600 * 1000;
 
+/**
+ * One shared coarse DEM grid per lot (20 m step, ~180 m margin — roughly
+ * 500 samples ≈ 6 API requests ≈ 5–15 s cold). Both the full analysis and
+ * the 3D visualizer's terrain grid derive from it, so a lot's first visit
+ * pays the elevation fetch exactly once. A denser 10 m grid would take
+ * ~45–60 s and isn't warranted for planning-level marketing estimates.
+ */
+const gridCache = new Map<
+  string,
+  { at: number; spec: GridSpec; z: number[][] }
+>();
+
+async function fetchCoarseGrid(
+  lotName: string,
+  ring: number[][]
+): Promise<{ spec: GridSpec; z: number[][] }> {
+  const hit = gridCache.get(lotName);
+  if (hit && Date.now() - hit.at < CACHE_TTL) return { spec: hit.spec, z: hit.z };
+
+  const spec = buildGridSpec(ring, 20, 180);
+  const pts: { lat: number; lng: number }[] = [];
+  for (const lat of spec.lats) for (const lng of spec.lngs) pts.push({ lat, lng });
+  const zFlat = await fetchElevations(pts, 500);
+
+  const z: number[][] = [];
+  for (let r = 0; r < spec.lats.length; r++)
+    z.push(zFlat.slice(r * spec.lngs.length, (r + 1) * spec.lngs.length));
+
+  gridCache.set(lotName, { at: Date.now(), spec, z });
+  return { spec, z };
+}
+
 export async function analyzeLot(
   lotName: string,
   ring: number[][]
@@ -435,15 +468,9 @@ export async function analyzeLot(
   const hit = analysisCache.get(lotName);
   if (hit && Date.now() - hit.at < CACHE_TTL) return hit.data;
 
-  const spec = buildGridSpec(ring, 10, 250);
+  const { spec, z } = await fetchCoarseGrid(lotName, ring);
   const rows = spec.lats.length;
   const cols = spec.lngs.length;
-
-  const pts: { lat: number; lng: number }[] = [];
-  for (const lat of spec.lats) for (const lng of spec.lngs) pts.push({ lat, lng });
-  const zFlat = await fetchElevations(pts);
-  const z: number[][] = [];
-  for (let r = 0; r < rows; r++) z.push(zFlat.slice(r * cols, (r + 1) * cols));
 
   // centroid (prefer inside polygon)
   let cr = Math.floor(rows / 2);
@@ -502,4 +529,60 @@ export async function analyzeLot(
 
   analysisCache.set(lotName, { at: Date.now(), data });
   return data;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lightweight coarse grid for the 3D visualizer                        */
+/* ------------------------------------------------------------------ */
+
+export interface TerrainGrid3D {
+  originLat: number;
+  originLng: number;
+  latStep: number;
+  lngStep: number;
+  rows: number;
+  cols: number;
+  z: number[][]; // [row][col], meters
+  centroidM: number;
+}
+
+/**
+ * Slim elevation grid for the 3D scene, derived from the shared coarse grid
+ * (see fetchCoarseGrid) so it costs nothing once the analysis has run — and
+ * vice versa.
+ */
+export async function fetchTerrainGrid3D(
+  lotName: string,
+  ring: number[][]
+): Promise<TerrainGrid3D> {
+  const { spec, z } = await fetchCoarseGrid(lotName, ring);
+  const rows = spec.lats.length;
+  const cols = spec.lngs.length;
+
+  // elevation nearest the polygon centroid (for the frontend's ground offset)
+  const clat = (Math.min(...spec.lats) + Math.max(...spec.lats)) / 2;
+  const clng = (Math.min(...spec.lngs) + Math.max(...spec.lngs)) / 2;
+  let cr = 0;
+  let cc = 0;
+  let best = Infinity;
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const d = Math.abs(spec.lats[r] - clat) + Math.abs(spec.lngs[c] - clng);
+      if (d < best) {
+        best = d;
+        cr = r;
+        cc = c;
+      }
+    }
+
+  return {
+    originLat: spec.lats[0],
+    originLng: spec.lngs[0],
+    latStep: rows > 1 ? spec.lats[1] - spec.lats[0] : 0,
+    lngStep: cols > 1 ? spec.lngs[1] - spec.lngs[0] : 0,
+    rows,
+    cols,
+    z,
+    centroidM: z[cr][cc],
+  };
 }
