@@ -11,6 +11,7 @@ import Footer from './sections/Footer'
 import Preloader from './sections/Preloader'
 import LotDetail from './pages/LotDetail'
 import Login from './pages/Login'
+import FlyoverVideo from './components/FlyoverVideo'
 
 function App() {
   const scrollRef = useRef({ y: 0, speed: 0 })
@@ -71,6 +72,7 @@ function App() {
               <Spatial />
               <Philosophy />
               <MapExplorer onSelectLot={handleSelectLot} />
+              <FlyoverVideo />
               <HomePlans />
               <Capabilities />
               <Hero />
