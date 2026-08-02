@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { GoogleMap } from '@react-google-maps/api'
-import { trpc } from '@/providers/trpc'
 import { useGoogleMaps } from './LotMap'
 
 /* ------------------------------------------------------------------ */
-/* solar position — same approximation as the server, so the light     */
-/* direction here always agrees with the Sun & Terrain panel           */
+/* solar position — same approximation as the server                   */
 /* ------------------------------------------------------------------ */
 const D2R = Math.PI / 180
 const R2D = 180 / Math.PI
@@ -14,8 +11,7 @@ function sunPosition(dateUtcMs: number, lat: number, lng: number) {
   const d = new Date(dateUtcMs)
   const start = Date.UTC(d.getUTCFullYear(), 0, 0)
   const doy = Math.floor((dateUtcMs - start) / 86400000)
-  const hour =
-    d.getUTCHours() + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600
+  const hour = d.getUTCHours() + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600
 
   const gamma = ((2 * Math.PI) / 365) * (doy - 1 + (hour - 12) / 24)
   const eqTime =
@@ -51,36 +47,28 @@ function sunPosition(dateUtcMs: number, lat: number, lng: number) {
 }
 
 function bearingToCompass(az: number): string {
-  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
   return dirs[Math.round(az / 22.5) % 16]
 }
 
-/** a point meters offset from a lat/lng (flat-earth, fine at lot scale) */
-function offsetPoint(lat: number, lng: number, dEast: number, dNorth: number) {
-  const dLat = dNorth / 111320
-  const dLng = dEast / (111320 * Math.cos(lat * D2R))
-  return { lat: lat + dLat, lng: lng + dLng }
+function bearingDeg(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+  const dLng = (toLng - fromLng) * D2R
+  const y = Math.sin(dLng) * Math.cos(toLat * D2R)
+  const x =
+    Math.cos(fromLat * D2R) * Math.sin(toLat * D2R) -
+    Math.sin(fromLat * D2R) * Math.cos(toLat * D2R) * Math.cos(dLng)
+  return (Math.atan2(y, x) * R2D + 360) % 360
 }
 
 /* ------------------------------------------------------------------ */
 /* viewer                                                              */
 /* ------------------------------------------------------------------ */
 type Season = 'summer' | 'equinox' | 'winter'
-type ViewDir = 'N' | 'E' | 'S' | 'W' | 'street'
-
-const SEASON_DATES: Record<Season, { month: number; day: number; label: string; tz: number }> = {
-  summer: { month: 5, day: 21, label: 'Summer', tz: -6 }, // Jun 21, MDT
-  equinox: { month: 2, day: 20, label: 'Spring / Fall', tz: -6 }, // Mar 20, MDT
-  winter: { month: 11, day: 21, label: 'Winter', tz: -7 }, // Dec 21, MST
+const SEASONS: Record<Season, { month: number; day: number; label: string; tz: number }> = {
+  summer: { month: 5, day: 21, label: 'Summer', tz: -6 },
+  equinox: { month: 2, day: 20, label: 'Spring / Fall', tz: -6 },
+  winter: { month: 11, day: 21, label: 'Winter', tz: -7 },
 }
-
-const CARDINALS: { dir: ViewDir; label: string }[] = [
-  { dir: 'N', label: 'N' },
-  { dir: 'E', label: 'E' },
-  { dir: 'S', label: 'S' },
-  { dir: 'W', label: 'W' },
-  { dir: 'street', label: 'Street' },
-]
 
 interface LotStandViewProps {
   lotName: string
@@ -90,327 +78,271 @@ interface LotStandViewProps {
 
 export default function LotStandView({ lotName, center, polygon }: LotStandViewProps) {
   const { isLoaded, loadError } = useGoogleMaps()
+  const hostRef = useRef<HTMLDivElement>(null)
+  const panoRef = useRef<google.maps.StreetViewPanorama | null>(null)
 
   const [season, setSeason] = useState<Season>('summer')
-  const [minutes, setMinutes] = useState(17 * 60) // 5:00 PM default
-  const [viewDir, setViewDir] = useState<ViewDir>('street')
-  const [lightOn, setLightOn] = useState(true)
+  const [minutes, setMinutes] = useState(17 * 60)
+  const [svStatus, setSvStatus] = useState<'loading' | 'found' | 'none'>('loading')
+  const [svNote, setSvNote] = useState<string>('')
 
-  const mapRef = useRef<google.maps.Map | null>(null)
-  const rectRef = useRef<google.maps.Rectangle | null>(null)
-
-  // facing direction → which way the street is
-  const { data: liveData } = trpc.lots.live.useQuery(undefined, { staleTime: 6 * 3600 * 1000 })
-  const facing = useMemo(() => {
-    const f = liveData?.features?.find(
-      (x: { properties: { name: string } }) => x.properties.name === lotName
-    ) as { properties: { facing?: string | null } } | undefined
-    return f?.properties?.facing ?? null
-  }, [liveData, lotName])
-
-  // sun position for the current season + time
-  const seasonInfo = SEASON_DATES[season]
+  /* ---- sun position ---- */
+  const seasonInfo = SEASONS[season]
   const sun = useMemo(() => {
     const year = new Date().getFullYear()
-    const utcMs =
-      Date.UTC(year, seasonInfo.month, seasonInfo.day) +
-      (minutes - seasonInfo.tz * 60) * 60000
+    const utcMs = Date.UTC(year, seasonInfo.month, seasonInfo.day) + (minutes - seasonInfo.tz * 60) * 60000
     return sunPosition(utcMs, center.lat, center.lng)
   }, [season, minutes, seasonInfo, center])
-
   const sunUp = sun.altitude > 0.5
 
-  // where the camera should sit + look
-  const view = useMemo(() => {
-    const R = 200 // meters back from the lot
-    const bearingToDeg: Record<string, number> = {
-      N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5,
-      S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5,
+  /* ---- candidate stand points: edge of the lot + nearby, toward the lot ---- */
+  const candidates = useMemo(() => {
+    const pts: { lat: number; lng: number }[] = []
+    if (polygon) {
+      // push outward from centroid through each vertex midpoint
+      for (const [lng, lat] of polygon) {
+        const dx = lng - center.lng
+        const dy = lat - center.lat
+        const len = Math.hypot(dx, dy) || 1
+        // ~25m beyond the lot edge
+        pts.push({ lat: lat + (dy / len) * 0.00025, lng: lng + (dx / len) * 0.00025 })
+      }
     }
+    pts.push(center) // last resort
+    return pts
+  }, [polygon, center])
 
-    let heading: number
-    if (viewDir === 'street') {
-      const streetAz = facing ? bearingToDeg[facing] ?? 0 : 0
-      // camera sits out in the street, looking INTO the lot = opposite of facing
-      heading = (streetAz + 180) % 360
-    } else {
-      // stand in the lot looking toward the chosen compass direction
-      heading = bearingToDeg[viewDir]
-    }
-
-    let camLat: number
-    let camLng: number
-    if (viewDir === 'street') {
-      // place the camera outside the lot toward the street
-      const streetAz = facing ? bearingToDeg[facing] ?? 0 : 0
-      const d = offsetPoint(
-        center.lat, center.lng,
-        R * Math.sin(streetAz * D2R),
-        R * Math.cos(streetAz * D2R)
-      )
-      camLat = d.lat
-      camLng = d.lng
-    } else {
-      // camera behind the lot, opposite the look direction
-      const back = (heading + 180) % 360
-      const d = offsetPoint(
-        center.lat, center.lng,
-        R * 0.7 * Math.sin(back * D2R),
-        R * 0.7 * Math.cos(back * D2R)
-      )
-      camLat = d.lat
-      camLng = d.lng
-    }
-    return { heading, camLat, camLng }
-  }, [viewDir, facing, center])
-
-  // apply camera + light overlay
+  /* ---- init Street View once maps are ready ---- */
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !isLoaded) return
+    if (!isLoaded || !hostRef.current) return
 
-    map.setOptions({
-      center: { lat: view.camLat, lng: view.camLng },
-      zoom: 18,
-      tilt: 45,
-      heading: view.heading,
+    const pano = new google.maps.StreetViewPanorama(hostRef.current, {
+      pov: { heading: 0, pitch: 0 },
+      zoom: 0,
+      addressControl: false,
+      linksControl: true,
+      panControl: true,
+      enableCloseButton: false,
+      fullscreenControl: true,
+      motionTracking: false,
+      motionTrackingControl: false,
     })
+    panoRef.current = pano
 
-    // light / dusk overlay — dim the scene when the sun is low or down
-    if (!rectRef.current) {
-      rectRef.current = new google.maps.Rectangle({
-        bounds: {
-          north: center.lat + 0.02,
-          south: center.lat - 0.02,
-          east: center.lng + 0.02,
-          west: center.lng - 0.02,
-        },
-        strokeWeight: 0,
-        fillColor: '#060a18',
-        clickable: false,
-        zIndex: 1,
-      })
+    const service = new google.maps.StreetViewService()
+
+    // try candidate points, widest search first for the closest real panorama
+    let cancelled = false
+    setSvStatus('loading')
+
+    const tryPoint = (idx: number) => {
+      if (cancelled || idx >= candidates.length) {
+        if (!cancelled) {
+          setSvStatus('none')
+          setSvNote('Street View has not photographed this street yet.')
+        }
+        return
+      }
+      service.getPanorama(
+        { location: candidates[idx], radius: 150, preference: google.maps.StreetViewPreference.NEAREST },
+        (data, status) => {
+          if (cancelled) return
+          if (status === google.maps.StreetViewStatus.OK && data?.location?.latLng) {
+            const pos = data.location.latLng
+            pano.setPosition(pos)
+            // face the lot
+            const heading = bearingDeg(pos.lat(), pos.lng(), center.lat, center.lng)
+            pano.setPov({ heading, pitch: 0 })
+            setSvStatus('found')
+            const desc = data.location.description ?? ''
+            const distM = Math.round(
+              Math.hypot(
+                (pos.lat() - center.lat) * 111320,
+                (pos.lng() - center.lng) * 111320 * Math.cos(center.lat * D2R)
+              )
+            )
+            setSvNote(
+              distM > 120
+                ? `Nearest Street View is ~${distM} m away${desc ? ` on ${desc}` : ''} — the lots themselves aren't photographed yet.`
+                : desc
+                  ? `Standing near ${desc}, looking toward Lot ${lotName}.`
+                  : `Looking toward Lot ${lotName}.`
+            )
+          } else {
+            tryPoint(idx + 1)
+          }
+        }
+      )
     }
-    const rect = rectRef.current
-    rect.setMap(lightOn ? map : null)
+    tryPoint(0)
 
-    // darkness: 0 at full sun, rising as the sun drops below ~20°
-    const darkness = lightOn
-      ? Math.min(0.62, Math.max(0, (20 - sun.altitude) / 20) * 0.62)
-      : 0
-    rect.setOptions({ fillOpacity: darkness })
-
-    // golden-hour tint just above the horizon
-    if (lightOn && sun.altitude > 0.5 && sun.altitude < 18) {
-      rect.setOptions({ fillColor: '#2a1a3a' })
-    } else {
-      rect.setOptions({ fillColor: '#060a18' })
+    return () => {
+      cancelled = true
+      panoRef.current = null
     }
-  }, [isLoaded, view, sun, lightOn, center])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, lotName])
 
-  const sliderLabel = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(
-    minutes % 60
-  ).padStart(2, '0')}`
+  const sliderLabel = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 
   return (
     <div style={{ borderBottom: '1px solid #000000', backgroundColor: '#0b0b0b' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '48px clamp(24px, 4vw, 60px)' }}>
-        <p
-          style={{
-            fontSize: '11px',
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            color: 'rgba(255,255,255,0.5)',
-            marginBottom: '8px',
-          }}
-        >
+        <p style={{ fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>
           Stand on the lot
         </p>
         <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', marginBottom: '24px', maxWidth: '640px', lineHeight: 1.6 }}>
-          Look around from street level{facing ? ` (this lot faces ${facing})` : ''}, then drag the
-          time slider to see where the sun sits and when the light fades.
+          Look around the real surroundings at street level — drag to turn, scroll to zoom, click the
+          road to move. Below, the sun readout shows where the light sits at any time of day.
         </p>
 
-        {/* viewer */}
-        <div style={{ position: 'relative', width: '100%', height: 'clamp(380px, 60vh, 600px)' }}>
-          {isLoaded && !loadError ? (
-            <GoogleMap
-              mapContainerStyle={{ width: '100%', height: '100%' }}
-              onLoad={(m) => {
-                mapRef.current = m
-              }}
-              options={{
-                mapTypeId: 'satellite',
-                tilt: 45,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: true,
-                rotateControl: true,
-                gestureHandling: 'greedy',
-                scrollwheel: true,
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'rgba(255,255,255,0.4)',
-                fontSize: '12px',
-                letterSpacing: '0.2em',
-                textTransform: 'uppercase',
-              }}
-            >
-              Loading view…
-            </div>
-          )}
+        {/* Street View */}
+        <div style={{ position: 'relative', width: '100%', height: 'clamp(380px, 60vh, 600px)', backgroundColor: '#111' }}>
+          {loadError ? (
+            <Centered>Note: map view unavailable — check the Google Maps key.</Centered>
+          ) : !isLoaded || svStatus === 'loading' ? (
+            <Centered>Finding the nearest street view…</Centered>
+          ) : svStatus === 'none' ? (
+            <Centered>
+              {svNote} Satellite imagery is your best look for now — see the map above.
+            </Centered>
+          ) : null}
 
-          {/* lot outline hint */}
-          {polygon && (
+          {/* the panorama mounts here; stays mounted but hidden behind status messages */}
+          <div
+            ref={hostRef}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              visibility: svStatus === 'found' ? 'visible' : 'hidden',
+            }}
+          />
+
+          {svStatus === 'found' && svNote && (
             <div
               style={{
                 position: 'absolute',
-                top: '14px',
+                bottom: '14px',
                 left: '14px',
+                maxWidth: '70%',
                 backgroundColor: 'rgba(11,11,11,0.78)',
                 border: '1px solid rgba(255,255,255,0.18)',
                 padding: '10px 14px',
                 fontSize: '12px',
                 color: 'rgba(255,255,255,0.85)',
-                letterSpacing: '0.06em',
+                lineHeight: 1.5,
               }}
             >
-              Lot {lotName} · {bearingToCompass(view.heading)} view
+              {svNote}
             </div>
           )}
-
-          {/* sun badge */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '14px',
-              right: '14px',
-              backgroundColor: 'rgba(11,11,11,0.78)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              padding: '10px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              fontSize: '12px',
-              color: 'rgba(255,255,255,0.85)',
-            }}
-          >
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                backgroundColor: sunUp ? '#f2b04a' : '#3a4a6a',
-                boxShadow: sunUp ? '0 0 10px #f2b04a' : 'none',
-              }}
-            />
-            {sunUp
-              ? `Sun ${bearingToCompass(sun.azimuth)} · ${sun.altitude.toFixed(0)}° up`
-              : 'Sun below the horizon'}
-          </div>
         </div>
 
-        {/* controls */}
+        {/* sun readout */}
         <div
           style={{
+            marginTop: '28px',
+            border: '1px solid rgba(255,255,255,0.14)',
+            padding: '24px clamp(16px, 2.5vw, 32px)',
             display: 'grid',
             gap: '20px',
-            marginTop: '24px',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
-            alignItems: 'center',
           }}
         >
-          {/* season */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {(Object.keys(SEASON_DATES) as Season[]).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSeason(s)}
-                style={{
-                  fontSize: '11px',
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  padding: '8px 16px',
-                  border: season === s ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.25)',
-                  backgroundColor: season === s ? 'rgba(242,176,74,0.12)' : 'transparent',
-                  color: season === s ? '#f2b04a' : 'rgba(255,255,255,0.7)',
-                  cursor: 'pointer',
-                }}
-              >
-                {SEASON_DATES[s].label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {(Object.keys(SEASONS) as Season[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSeason(s)}
+                  style={{
+                    fontSize: '11px',
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    padding: '8px 16px',
+                    border: season === s ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.25)',
+                    backgroundColor: season === s ? 'rgba(242,176,74,0.12)' : 'transparent',
+                    color: season === s ? '#f2b04a' : 'rgba(255,255,255,0.7)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {SEASONS[s].label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 280px', maxWidth: '460px' }}>
+              <span style={{ fontSize: '15px', color: '#f2b04a', fontVariantNumeric: 'tabular-nums', minWidth: '48px' }}>
+                {sliderLabel}
+              </span>
+              <input
+                type="range"
+                min={4 * 60}
+                max={22 * 60}
+                step={15}
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+                style={{ flex: 1, accentColor: '#f2b04a' }}
+              />
+            </div>
           </div>
 
-          {/* time slider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <span style={{ fontSize: '13px', color: '#f2b04a', fontVariantNumeric: 'tabular-nums', minWidth: '46px' }}>
-              {sliderLabel}
-            </span>
-            <input
-              type="range"
-              min={4 * 60}
-              max={22 * 60}
-              step={15}
-              value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-              style={{ flex: 1, accentColor: '#f2b04a' }}
-            />
-          </div>
-
-          {/* view direction */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {CARDINALS.map(({ dir, label }) => (
-              <button
-                key={dir}
-                onClick={() => setViewDir(dir)}
-                style={{
-                  fontSize: '11px',
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  padding: '8px 14px',
-                  border: viewDir === dir ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.25)',
-                  backgroundColor: viewDir === dir ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: viewDir === dir ? '#ffffff' : 'rgba(255,255,255,0.65)',
-                  cursor: 'pointer',
-                }}
-              >
-                {label}
-              </button>
-            ))}
-            <button
-              onClick={() => setLightOn((v) => !v)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span
               style={{
-                fontSize: '11px',
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                padding: '8px 14px',
-                marginLeft: '8px',
-                border: lightOn ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.25)',
-                backgroundColor: lightOn ? 'rgba(242,176,74,0.12)' : 'transparent',
-                color: lightOn ? '#f2b04a' : 'rgba(255,255,255,0.65)',
-                cursor: 'pointer',
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: sunUp ? '#f2b04a' : '#3a4a6a',
+                boxShadow: sunUp ? '0 0 12px #f2b04a' : 'none',
+                flexShrink: 0,
               }}
-            >
-              Sunlight {lightOn ? 'on' : 'off'}
-            </button>
+            />
+            <p style={{ fontSize: 'clamp(17px, 1.8vw, 22px)', color: '#ffffff', letterSpacing: '-0.01em' }}>
+              {sunUp ? (
+                <>
+                  In {SEASONS[season].label.toLowerCase()} at {sliderLabel}, the sun is{' '}
+                  <strong>{sun.altitude.toFixed(0)}°</strong> up in the{' '}
+                  <strong>{bearingToCompass(sun.azimuth)}</strong> sky ({Math.round(sun.azimuth)}°)
+                  {bearingToCompass(sun.azimuth) === 'W' || bearingToCompass(sun.azimuth) === 'WSW' || bearingToCompass(sun.azimuth) === 'WNW' || bearingToCompass(sun.azimuth) === 'SW' || bearingToCompass(sun.azimuth) === 'NW'
+                    ? ' — golden light toward the lot.'
+                    : '.'}
+                </>
+              ) : (
+                <>In {SEASONS[season].label.toLowerCase()} at {sliderLabel}, the sun is below the horizon.</>
+              )}
+            </p>
           </div>
         </div>
 
         <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '16px', lineHeight: 1.6 }}>
-          Satellite view tilted to street level. The sunlight overlay dims the scene as the sun
-          drops; it shows sun position, not cast shadows. A full 3D photoreal view is coming once
-          Google's 3D tiles cover this area.
+          Street View shows the nearest real photography to this lot — drag to look in any
+          direction. The new internal streets may not be photographed yet; in that case you'll
+          see the closest existing road. Sun position is calculated for the lot's exact location.
         </p>
       </div>
+    </div>
+  )
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        padding: '0 32px',
+        color: 'rgba(255,255,255,0.45)',
+        fontSize: '13px',
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        lineHeight: 1.8,
+      }}
+    >
+      {children}
     </div>
   )
 }

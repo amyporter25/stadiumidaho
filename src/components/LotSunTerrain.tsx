@@ -238,32 +238,38 @@ export default function LotSunTerrain({ lotName }: { lotName: string }) {
             gap: '36px',
           }}
         >
-          {/* season switch */}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {(
-              [
-                ['summer', 'Summer'],
-                ['equinox', 'Spring / Fall'],
-                ['winter', 'Winter'],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setSeason(key)}
-                style={{
-                  fontSize: '12px',
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  padding: '10px 20px',
-                  border: season === key ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.25)',
-                  backgroundColor: season === key ? 'rgba(242,176,74,0.12)' : 'transparent',
-                  color: season === key ? '#f2b04a' : 'rgba(255,255,255,0.7)',
-                  cursor: 'pointer',
-                }}
-              >
-                {label}
-              </button>
-            ))}
+          {/* season switch — a labelled dropdown so the change is obvious */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <label
+              htmlFor="season-select"
+              style={{ fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}
+            >
+              Showing sunlight for
+            </label>
+            <select
+              id="season-select"
+              value={season}
+              onChange={(e) => setSeason(e.target.value as 'summer' | 'equinox' | 'winter')}
+              style={{
+                fontSize: '14px',
+                letterSpacing: '0.04em',
+                padding: '10px 16px',
+                backgroundColor: '#1a1a1a',
+                color: '#f2b04a',
+                border: '1px solid #f2b04a',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              <option value="summer">Summer (June 21)</option>
+              <option value="equinox">Spring / Fall (Mar 20)</option>
+              <option value="winter">Winter (Dec 21)</option>
+            </select>
+            <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+              {season === 'summer' && '— the longest day'}
+              {season === 'equinox' && '— day and night are equal'}
+              {season === 'winter' && '— the shortest day'}
+            </span>
           </div>
 
           {/* big numbers */}
