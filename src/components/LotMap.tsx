@@ -112,6 +112,19 @@ interface StadiumLotMapProps {
   interactive?: boolean
 }
 
+function centroidOf(ring: number[][]): { lat: number; lng: number } | null {
+  if (!ring || ring.length === 0) return null
+  let lat = 0
+  let lng = 0
+  const n = ring[0] === ring[ring.length - 1] ? ring.length - 1 : ring.length
+  const pts = ring.slice(0, n)
+  for (const [x, y] of pts) {
+    lng += x
+    lat += y
+  }
+  return { lat: lat / pts.length, lng: lng / pts.length }
+}
+
 let geojsonCache: StadiumLotFeature[] | null = null
 let geojsonPromise: Promise<StadiumLotFeature[]> | null = null
 
@@ -176,10 +189,11 @@ export default function LotMap({
     const isActive = hoveredRef.current === name || selectedRef.current === name
     return {
       fillColor: color,
-      fillOpacity: isActive ? 0.55 : status === 'Available' ? 0.38 : 0.28,
-      strokeColor: isActive ? '#ffffff' : color,
-      strokeWeight: isActive ? 3 : 1.5,
-      strokeOpacity: 0.95,
+      fillOpacity: isActive ? 0.65 : status === 'Available' ? 0.5 : 0.38,
+      // Stark white lot boundaries so lines read clearly over the satellite imagery
+      strokeColor: '#ffffff',
+      strokeWeight: isActive ? 4 : 2.5,
+      strokeOpacity: 1,
       zIndex: isActive ? 10 : 1,
       clickable: interactive,
     }
@@ -204,6 +218,51 @@ export default function LotMap({
     }
     restyle()
   }, [features, filterLot, restyle, isLoaded])
+
+  // Lot number pins — round status-colored badges with the lot number, matching
+  // the Groove widget so buyers can cross-reference the two views.
+  const labelMarkersRef = useRef<google.maps.Marker[]>([])
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !features || !isLoaded) return
+
+    for (const m of labelMarkersRef.current) m.setMap(null)
+    labelMarkersRef.current = []
+
+    for (const feat of features) {
+      if (!feat.geometry) continue
+      if (filterLot && !filterLot(feat)) continue
+      const p = feat.properties
+      const pos = p.label
+        ? { lat: p.label[0], lng: p.label[1] }
+        : centroidOf(feat.geometry.coordinates[0])
+      if (!pos) continue
+      const color = statusPinColor(p.status)
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34">` +
+        `<circle cx="17" cy="17" r="15.5" fill="${color}" stroke="#ffffff" stroke-width="2.5"/>` +
+        `<text x="17" y="21.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#ffffff">${p.name}</text>` +
+        `</svg>`
+      const marker = new google.maps.Marker({
+        map,
+        position: pos,
+        icon: {
+          url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+          scaledSize: new google.maps.Size(34, 34),
+          anchor: new google.maps.Point(17, 17),
+        },
+        clickable: false,
+        zIndex: 5,
+        optimized: true,
+      })
+      labelMarkersRef.current.push(marker)
+    }
+
+    return () => {
+      for (const m of labelMarkersRef.current) m.setMap(null)
+      labelMarkersRef.current = []
+    }
+  }, [features, filterLot, isLoaded])
 
   const handleLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map

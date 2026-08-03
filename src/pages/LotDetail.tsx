@@ -9,7 +9,6 @@ import LotMap, {
 } from '../components/LotMap'
 import LotSunTerrain from '../components/LotSunTerrain'
 import LotVisualizer from '../components/lotVisualizer/LotVisualizer'
-import FlyoverVideo from '../components/FlyoverVideo'
 
 interface LotDetailProps {
   lotName: string
@@ -254,9 +253,6 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
           />
         </div>
       )}
-
-      {/* Real drone flyover — the actual ground around this lot */}
-      <FlyoverVideo lotName={p.name} />
 
       {/* 3D visualizer — only for lots that can be built on */}
       {center && lot.geometry && p.status === 'Available' && (
