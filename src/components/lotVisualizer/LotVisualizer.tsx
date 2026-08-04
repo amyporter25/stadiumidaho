@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { community } from '../../data/lots'
 import { trpc } from '@/providers/trpc'
 import { homePlans } from '../../data/plans'
 import {
@@ -69,6 +70,20 @@ interface LotVisualizerProps {
 
 const EYE_M = 1.7
 const VANTAGE_M = 7.5 // ~25 ft — second-story height above the street
+
+/* ---- "Real ground" mode: the August 2026 drone splat as terrain ----
+ * The splat is normalized (centered, ~4.1 units across) — these constants
+ * scale/rotate/offset it onto the local meter frame at the community center.
+ * Derived from the splat bounding box and the subdivision's real extent. */
+const SPLAT = {
+  // the subdivision spans ~430m E-W; the splat spans ~4.1 normalized units
+  unitsPerMeter: 4.0995 / 430,
+  // splat Y is down-ish in Polycam exports; flip upright and face north
+  rotationY: Math.PI, // 180° — initial guess, corrected after visual check
+  // the splat's capture center sits near the community centroid
+  originLat: community.center.lat,
+  originLng: community.center.lng,
+}
 
 export default function LotVisualizer({ lotName, center, polygon, facing, neighbors = [] }: LotVisualizerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -147,12 +162,20 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
     mode: 'walk' | 'moveHouse'
     groundAt: (x: number, z: number) => number
     setCamMode: (m: 'vantage' | 'walk') => void
+    groundMesh: THREE.Mesh
+    roadMeshes: THREE.Object3D[]
+    setRealGround: (on: boolean) => Promise<boolean>
+    realGroundOn: boolean
+    realGroundLoading: boolean
   } | null>(null)
 
   const [ready, setReady] = useState(false)
   const [mode, setMode] = useState<'walk' | 'moveHouse'>('walk')
   const [camView, setCamView] = useState<'vantage' | 'walk'>('vantage')
   const [imageryOn, setImageryOn] = useState(false)
+  const [realGround, setRealGround] = useState(false)
+  const [realGroundLoading, setRealGroundLoading] = useState(false)
+  const [realGroundFailed, setRealGroundFailed] = useState(false)
 
   useEffect(() => {
     if (!terrain || !hostRef.current) return
@@ -281,6 +304,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
     }
 
     /* ---- street ribbon from OSM centrelines ---- */
+    const roadMeshes: THREE.Object3D[] = []
     const roads = roadsQ.data ?? []
     const roadMat = new THREE.MeshStandardMaterial({ color: 0x3d3d40, roughness: 0.95 })
     for (const road of roads) {
@@ -298,6 +322,7 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
         seg.rotation.y = Math.atan2(bx - ax, bz - az)
         seg.receiveShadow = true
         scene.add(seg)
+        roadMeshes.push(seg)
       }
     }
 
@@ -363,12 +388,82 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
       }
     }
 
+    /* ---- real-ground splat ----
+     * The drone capture is loaded lazily the first time the visitor turns
+     * "Real ground" on. It renders as the terrain in place of the blurry
+     * satellite drape + fake roads; the synthetic ground stays invisibly in
+     * place (house placement, eye height, boundary draping all reference it). */
+    let splatViewer: import('@mkkellogg/gaussian-splats-3d').DropInViewer | null = null
+    let splatLoading = false
+    const state = { realGroundOn: false, realGroundLoading: false }
+
+    const setRealGround = async (on: boolean): Promise<boolean> => {
+      if (on) {
+        if (splatViewer) {
+          state.realGroundOn = true
+          ground.visible = false
+          roadMeshes.forEach((r) => { r.visible = false })
+          splatViewer.visible = true
+          return true
+        }
+        if (splatLoading) return false
+        splatLoading = true
+        state.realGroundLoading = true
+        try {
+          const GS3D = await import('@mkkellogg/gaussian-splats-3d')
+          const v = new GS3D.DropInViewer({
+            selfDrivenMode: false,
+            useBuiltInControls: false,
+            sharedMemoryForWorkers: false,
+            ignoreDevicePixelRatio: true,
+          })
+          await v.addSplatScene('/splats/stadium-u-small.ksplat', {
+            progressiveLoad: false,
+            showLoadingUI: false,
+          })
+          if (cancelled) { void v.dispose(); return false }
+          // geo-align: normalized units -> meters at the community centroid,
+          // then shift into this lot's local frame
+          const [sOx, sOz] = frame.toLocal(SPLAT.originLat, SPLAT.originLng)
+          const s = 1 / SPLAT.unitsPerMeter
+          v.scale.set(s, s, s)
+          v.rotation.y = SPLAT.rotationY
+          // the capture's road plane sits ~0.45 normalized units below its
+          // center (0.16 below the -2.05-unit bowl bottom); lift it onto the
+          // DEM ground at the capture centroid
+          const liftM = 0.45 * s
+          v.position.set(sOx, groundAt(sOx, sOz) + liftM, sOz)
+          scene.add(v)
+          splatViewer = v
+          state.realGroundOn = true
+          ground.visible = false
+          roadMeshes.forEach((r) => { r.visible = false })
+          return true
+        } catch {
+          return false
+        } finally {
+          splatLoading = false
+          state.realGroundLoading = false
+        }
+      }
+      state.realGroundOn = false
+      ground.visible = true
+      roadMeshes.forEach((r) => { r.visible = true })
+      if (splatViewer) splatViewer.visible = false
+      return true
+    }
+
     sceneRef.current = {
       renderer, scene, camera, houseAnchor, driveway,
       sun: sunLight, hemi, rayGround,
       keys: {}, dragging: false, mode: 'walk',
       groundAt,
       setCamMode,
+      groundMesh: ground,
+      roadMeshes,
+      setRealGround,
+      realGroundOn: false,
+      realGroundLoading: false,
     }
 
     /* ---- input ---- */
@@ -509,6 +604,23 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
         setDrivewayM((prev) => (Math.abs(prev - dLenNow) > 0.5 ? dLenNow : prev))
 
         s.renderer.render(s.scene, s.camera)
+        // DropInViewer only updates its internal state during the scene pass
+        // (via its callback mesh) — the actual splat draw is a second render
+        // call here, with autoClear off so it composites over the scene.
+        if (splatViewer && state.realGroundOn && splatViewer.visible) {
+          const v = splatViewer as unknown as {
+            viewer: { splatRenderReady?: boolean; splatMesh?: THREE.Object3D; render?: () => void }
+          }
+          if (v.viewer.splatRenderReady && v.viewer.splatMesh) {
+            const savedAutoClear = s.renderer.autoClear
+            s.renderer.autoClear = false
+            s.renderer.render(v.viewer.splatMesh as unknown as THREE.Scene, s.camera)
+            s.renderer.autoClear = savedAutoClear
+          }
+        }
+        // sync mutable splat state back into React for button labels
+        if (s.realGroundOn !== state.realGroundOn) s.realGroundOn = state.realGroundOn
+        if (s.realGroundLoading !== state.realGroundLoading) s.realGroundLoading = state.realGroundLoading
       }
       raf = requestAnimationFrame(animate)
     }
@@ -586,6 +698,24 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
     if (ready) sceneRef.current?.setCamMode(camView)
   }, [camView, ready])
 
+  /* ---- real ground toggle ---- */
+  const toggleRealGround = () => {
+    const s = sceneRef.current
+    if (!s) return
+    if (realGround) {
+      void s.setRealGround(false)
+      setRealGround(false)
+      return
+    }
+    setRealGroundLoading(true)
+    setRealGroundFailed(false)
+    void s.setRealGround(true).then((ok) => {
+      setRealGroundLoading(false)
+      if (ok) setRealGround(true)
+      else setRealGroundFailed(true)
+    })
+  }
+
   const sliderLabel = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
   const fp = houseFootprint(planId)
   const plan = homePlans.find((p) => p.id === planId)
@@ -643,6 +773,18 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
             <>
               {/* camera view toggle */}
               <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', gap: 8 }}>
+                <button
+                  onClick={toggleRealGround}
+                  style={{
+                    fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase',
+                    padding: '9px 16px',
+                    border: realGround ? '1px solid #f2b04a' : '1px solid rgba(255,255,255,0.3)',
+                    backgroundColor: realGround ? 'rgba(242,176,74,0.15)' : 'rgba(11,11,11,0.6)',
+                    color: realGround ? '#f2b04a' : 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                  }}
+                >
+                  {realGroundLoading ? 'Loading real ground…' : realGroundFailed ? 'Real ground unavailable' : realGround ? 'Real ground ✓' : 'Real ground'}
+                </button>
                 {(['vantage', 'walk'] as const).map((v) => (
                   <button
                     key={v}
