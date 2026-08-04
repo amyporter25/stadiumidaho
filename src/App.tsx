@@ -12,6 +12,7 @@ import Preloader from './sections/Preloader'
 import LotDetail from './pages/LotDetail'
 import Login from './pages/Login'
 import FlyoverVideo from './components/FlyoverVideo'
+import StadiumSplat from './components/StadiumSplat'
 
 function App() {
   const scrollRef = useRef({ y: 0, speed: 0 })
@@ -73,6 +74,7 @@ function App() {
               <Philosophy />
               <MapExplorer onSelectLot={handleSelectLot} />
               <FlyoverVideo />
+              <StadiumSplat />
               <HomePlans />
               <Capabilities />
               <Hero />
