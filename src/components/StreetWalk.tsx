@@ -15,9 +15,21 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 
 type Manifest = { frames: number; path: number[]; panFrom: number }
 
-const SRC = (i: number) => `/walk/lot46/${String(i).padStart(3, '0')}.jpg`
+const SRC = (base: string, i: number) => `${base}/${String(i).padStart(3, '0')}.jpg`
 
-export default function StreetWalk() {
+interface StreetWalkProps {
+  /** folder under /walk containing 000.jpg… + manifest.json */
+  srcBase?: string
+  /** small uppercase label above the blurb */
+  eyebrow?: string
+  blurb?: string
+}
+
+export default function StreetWalk({
+  srcBase = '/walk/lot46',
+  eyebrow = 'Walk the street · proof of concept — lot 46, Yogi',
+  blurb = 'This is real footage shot standing on the street in August 2026 — not a rendering. Drag across the image to walk down the street and look around, exactly the way you would standing there.',
+}: StreetWalkProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [manifest, setManifest] = useState<Manifest | null>(null)
   const [active, setActive] = useState(false)
@@ -50,7 +62,7 @@ export default function StreetWalk() {
     if (!active) return
     let cancelled = false
     ;(async () => {
-      const m: Manifest = await (await fetch('/walk/lot46/manifest.json')).json()
+      const m: Manifest = await (await fetch(`${srcBase}/manifest.json`)).json()
       if (cancelled) return
       setManifest(m)
       // first frame gates "ready"; the rest stream in behind it
@@ -58,13 +70,13 @@ export default function StreetWalk() {
         const im = new Image()
         im.onload = () => res()
         im.onerror = () => res()
-        im.src = SRC(0)
+        im.src = SRC(srcBase, 0)
       })
       if (cancelled) return
       setReady(true)
       for (let i = 1; i < m.frames; i++) {
         const im = new Image()
-        im.src = SRC(i)
+        im.src = SRC(srcBase, i)
       }
     })()
     return () => {
@@ -131,7 +143,7 @@ export default function StreetWalk() {
             marginBottom: '8px',
           }}
         >
-          Walk the street · proof of concept — lot 46, Yogi
+          {eyebrow}
         </p>
         <p
           style={{
@@ -142,9 +154,7 @@ export default function StreetWalk() {
             lineHeight: 1.6,
           }}
         >
-          This is real footage shot standing on the street in August 2026 — not a rendering.
-          Drag across the image to walk down the street and look around, exactly the way you
-          would standing there.
+          {blurb}
         </p>
 
         <div
@@ -167,14 +177,14 @@ export default function StreetWalk() {
           {ready && manifest ? (
             <>
               <img
-                src={SRC(base)}
+                src={SRC(srcBase, base)}
                 alt="On-site street footage"
                 draggable={false}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
               {next !== base && (
                 <img
-                  src={SRC(next)}
+                  src={SRC(srcBase, next)}
                   alt=""
                   draggable={false}
                   style={{
