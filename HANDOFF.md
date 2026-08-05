@@ -167,6 +167,17 @@ headlessly, but three.js scenes can:
   kills the kernel.
 - Verify pano changes with TWO shots: default vantage and one after a mouse-drag orbit (~120°).
 
+## 6b. Track B — Lot Studio (parallel path)
+
+Greenfield experience at **`/studio`**: Gaussian splat world + upload-a-house-photo
+placement. See `src/studio/README.md`.
+
+- Uses `/splats/stadium.ksplat` as a stand-in until Polycam “Stadium 3D TWO”
+  (`43c9aa3f-5f3a-46f1-8861-21db83675c09`) is delivered as a web-sized `.ksplat`/`.splat`
+  (raw `.ply` cannot be uploaded in chat — zip it, convert via SuperSplat, or host on CDN).
+- Override splat: `/studio?splat=https://…/file.ksplat`
+- Intentionally not wired into `LotDetail` yet.
+
 ## 7. Known open items / backlog
 
 1. **Owner confirmation that "lot 46 on Yogi" == 46/3** (see §2.4). If the plat has a Yogi street

@@ -13,6 +13,7 @@ import LotDetail from './pages/LotDetail'
 import Login from './pages/Login'
 import FlyoverVideo from './components/FlyoverVideo'
 import StadiumSplat from './components/StadiumSplat'
+import LotStudioPage from './studio/LotStudioPage'
 
 function App() {
   const scrollRef = useRef({ y: 0, speed: 0 })
@@ -62,6 +63,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Track B — isolated lot visualization experience */}
+      <Route path="/studio" element={<LotStudioPage />} />
       <Route path="*" element={
         <>
           <Preloader />
