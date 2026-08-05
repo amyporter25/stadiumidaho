@@ -9,14 +9,6 @@ import LotMap, {
 } from '../components/LotMap'
 import LotSunTerrain from '../components/LotSunTerrain'
 import LotVisualizer from '../components/lotVisualizer/LotVisualizer'
-import StreetWalk from '../components/StreetWalk'
-
-// Lots that have on-site captured street footage, keyed by lot name.
-// (The test shoot fronts one of the two lot 46s — pending confirmation which.)
-const LOT_WALKS: Record<string, { src: string }> = {
-  '46/2': { src: '/walk/lot46' },
-  '46/3': { src: '/walk/lot46' },
-}
 
 interface LotDetailProps {
   lotName: string
@@ -270,15 +262,6 @@ export default function LotDetail({ lotName, onBack }: LotDetailProps) {
           polygon={lot.geometry.coordinates[0]}
           facing={p.facing}
           neighbors={neighbors}
-        />
-      )}
-
-      {/* On-site street footage — real captured walk for this lot */}
-      {LOT_WALKS[p.name] && (
-        <StreetWalk
-          srcBase={LOT_WALKS[p.name].src}
-          eyebrow={`Walk the street · real footage at lot ${p.name}`}
-          blurb="This is real footage shot standing on the street at this lot in August 2026 — not a rendering. Drag across the image to walk along the lot's frontage and look around, exactly the way you would standing there."
         />
       )}
 
