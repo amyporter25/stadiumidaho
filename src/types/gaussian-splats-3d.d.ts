@@ -15,6 +15,9 @@ declare module '@mkkellogg/gaussian-splats-3d' {
     dropInMode?: boolean
     camera?: unknown
     renderer?: unknown
+    /** Optional Three.js scene the viewer will render alongside the splats. */
+    threeScene?: unknown
+    gpuAcceleratedSort?: boolean
   }
 
   export interface SplatSceneOptions {
