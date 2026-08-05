@@ -22,7 +22,7 @@ export default function LotStudioPage() {
    * Rough scale bridge: the current stadium.ksplat is a normalized site capture
    * (~a few units across). Tunable until we geo-align Stadium 3D TWO.
    */
-  const [unitsPerFoot, setUnitsPerFoot] = useState(0.012)
+  const [unitsPerFoot, setUnitsPerFoot] = useState(STUDIO_WORLD.defaultUnitsPerFoot)
   const [groundY, setGroundY] = useState(STUDIO_WORLD.groundY)
   const [showAlign, setShowAlign] = useState(false)
 

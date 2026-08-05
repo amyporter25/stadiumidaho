@@ -121,6 +121,8 @@ export default function StudioCanvas({
     controls.enableDamping = true
     controls.dampingFactor = 0.08
     controls.maxPolarAngle = Math.PI * 0.49
+    controls.minDistance = 1
+    controls.maxDistance = 80
     controlsRef.current = controls
 
     // Soft fill so the cutout reads when the splat is still loading.

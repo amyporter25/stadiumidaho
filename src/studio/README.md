@@ -15,9 +15,9 @@ https://poly.cam/capture/43c9aa3f-5f3a-46f1-8861-21db83675c09
 to pull the Gaussian splat bytes into our app. Cursor also blocks uploading raw
 `.ply` files. So we need a **web-sized converted asset** delivered some other way.
 
-Until that arrives, Studio loads the already-compressed stand-in:
+**Current world asset (in repo):**
 
-`/splats/stadium.ksplat` (~19 MB)
+`/splats/stadium-3d-two.splat` (~31 MB, Polycam “Stadium 3D TWO”)
 
 Override anytime with:
 

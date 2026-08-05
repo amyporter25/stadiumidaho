@@ -172,9 +172,8 @@ headlessly, but three.js scenes can:
 Greenfield experience at **`/studio`**: Gaussian splat world + upload-a-house-photo
 placement. See `src/studio/README.md`.
 
-- Uses `/splats/stadium.ksplat` as a stand-in until Polycam “Stadium 3D TWO”
-  (`43c9aa3f-5f3a-46f1-8861-21db83675c09`) is delivered as a web-sized `.ksplat`/`.splat`
-  (raw `.ply` cannot be uploaded in chat — zip it, convert via SuperSplat, or host on CDN).
+- World asset: `/splats/stadium-3d-two.splat` (~31 MB) from Polycam “Stadium 3D TWO”
+  (`43c9aa3f-5f3a-46f1-8861-21db83675c09`), delivered via Google Drive as `.splat`.
 - Override splat: `/studio?splat=https://…/file.ksplat`
 - Intentionally not wired into `LotDetail` yet.
 
