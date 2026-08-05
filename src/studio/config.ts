@@ -11,18 +11,23 @@ export const STUDIO_WORLD = {
   polycamUrl: 'https://poly.cam/capture/43c9aa3f-5f3a-46f1-8861-21db83675c09',
   label: 'Stadium 3D TWO · site capture',
   /**
-   * Bounds from the .splat centers (splat-local units):
-   * size ≈ 18.4 × 21.9 × 21.8, center ≈ (-0.10, -3.86, -0.45)
+   * Polycam exported this capture Z-up; three.js is Y-up.
+   * Apply Rx(-90°) on the DropInViewer so terrain lies flat.
+   * Transformed bounds (approx): center (-0.10, -0.45, 3.86),
+   * size ≈ 18.4 × 21.8 × 21.9
    */
-  cameraPosition: [-0.1, 6.8, 11.5] as [number, number, number],
-  cameraLookAt: [-0.1, -3.9, -0.5] as [number, number, number],
+  /**
+   * Optional splat orientation as quaternion [x,y,z,w] for addSplatScene.
+   * Null = identity (raw Polycam axes). Tune via Align if the site is tipped.
+   */
+  splatRotationQuat: null as [number, number, number, number] | null,
+  /** Elevated oblique start so the site reads as terrain, not edge-on. */
+  cameraPosition: [9, 11, 9] as [number, number, number],
+  cameraLookAt: [0.2, -3.9, -0.45] as [number, number, number],
   /** Default house width when a photo is first placed (feet). */
   defaultHouseWidthFt: 48,
-  /**
-   * Raycast plane near the bottom of the capture (terrain).
-   * Nudge in the Align panel if cutouts float or sink.
-   */
-  groundY: -13.5,
+  /** Raycast plane near median terrain height (Y p50 ≈ -3.9). */
+  groundY: -4.0,
   /**
    * Rough scale: site is ~20 units across; if that maps to ~800–1200 ft of
    * subdivision frontage, ~0.02 u/ft puts a 48 ft home at a readable size.
