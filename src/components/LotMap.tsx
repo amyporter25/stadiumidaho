@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GoogleMap } from '@react-google-maps/api'
 import { trpc } from '@/providers/trpc'
 import { community } from '../data/lots'
@@ -330,24 +330,33 @@ export default function LotMap({
 
   const hoveredFeature = hovered && features ? features.find((f) => f.properties.name === hovered) : null
 
+  // Memoized so hover/selection re-renders don't hand the map a fresh options
+  // object — @react-google-maps/api re-applies changed options, and re-applying
+  // center/zoom snaps the user's pan back to the middle.
+  const mapOptions = useMemo<google.maps.MapOptions>(
+    () => ({
+      mapTypeId: 'hybrid',
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: true,
+      rotateControl: true,
+      gestureHandling: 'greedy',
+      scrollwheel: true,
+      styles: DARK_STYLES,
+      center,
+      zoom,
+      tilt: tilt ? 45 : 0,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [center.lat, center.lng, zoom, tilt]
+  )
+
   return (
     <div style={{ position: 'relative', width: '100%', height }}>
       <GoogleMap
         mapContainerStyle={{ width: '100%', height: '100%' }}
         onLoad={handleLoad}
-        options={{
-          mapTypeId: 'hybrid',
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: true,
-          rotateControl: true,
-          gestureHandling: 'greedy',
-          scrollwheel: true,
-          styles: DARK_STYLES,
-          center,
-          zoom,
-          tilt: tilt ? 45 : 0,
-        }}
+        options={mapOptions}
       />
 
       {/* Legend */}
