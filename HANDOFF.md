@@ -169,13 +169,12 @@ headlessly, but three.js scenes can:
 
 ## 6b. Track B — Lot Studio (parallel path)
 
-Greenfield experience at **`/studio`**: Gaussian splat world + upload-a-house-photo
-placement. See `src/studio/README.md`.
+Greenfield experience at **`/studio`**. See `src/studio/README.md`.
 
-- World asset: `/splats/stadium-3d-two.splat` (~31 MB) from Polycam “Stadium 3D TWO”
-  (`43c9aa3f-5f3a-46f1-8861-21db83675c09`), delivered via Google Drive as `.splat`.
-- Override splat: `/studio?splat=https://…/file.ksplat`
-- Intentionally not wired into `LotDetail` yet.
+**Current default (lot-first):** aerial imagery + plat outline + house photo cutout.
+The Polycam site-wide Gaussian splat was tried and rejected as a “blotchy blob” —
+kept on disk (`public/splats/stadium-3d-two.splat`) but not shown by default.
+Intentionally not wired into `LotDetail` yet.
 
 ## 7. Known open items / backlog
 

@@ -1,72 +1,74 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { STUDIO_WORLD } from './config'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { FT_TO_M, makeFrame, ringToLocal, type LocalFrame } from '../components/lotVisualizer/geo'
+import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
+import type { StadiumLotFeature } from '../components/LotMap'
 
 export type StudioMode = 'look' | 'place'
 
 interface StudioCanvasProps {
-  splatUrl: string
+  lot: StadiumLotFeature
+  neighbors: StadiumLotFeature[]
   mode: StudioMode
   houseImageUrl: string | null
   houseWidthFt: number
   houseYawDeg: number
-  unitsPerFoot: number
-  groundY: number
   onStatus: (msg: string) => void
   onLoadError: (msg: string) => void
 }
 
+function lotCentroid(lot: StadiumLotFeature): { lat: number; lng: number } {
+  const label = lot.properties.label
+  if (label) return { lng: label[0], lat: label[1] }
+  const ring = lot.geometry!.coordinates[0]
+  let lat = 0
+  let lng = 0
+  for (const [x, y] of ring) {
+    lng += x
+    lat += y
+  }
+  return { lat: lat / ring.length, lng: lng / ring.length }
+}
+
 /**
- * Splat world + photo cutout using GaussianSplats3D.Viewer with a shared
- * threeScene (the path recommended by the library — avoids DropInViewer issues).
+ * Lot-first world: real aerial photo, plat outline, house photo cutout in feet.
+ * This is the Track B primary experience — not the Polycam splat blob.
  */
 export default function StudioCanvas({
-  splatUrl,
+  lot,
+  neighbors,
   mode,
   houseImageUrl,
   houseWidthFt,
   houseYawDeg,
-  unitsPerFoot,
-  groundY,
   onStatus,
   onLoadError,
 }: StudioCanvasProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef(mode)
   const houseRef = useRef<THREE.Mesh | null>(null)
-  const groundRef = useRef<THREE.Mesh | null>(null)
-  const shadowRef = useRef<THREE.Mesh | null>(null)
-  const viewerRef = useRef<{
-    controls?: { enabled: boolean } | null
-    getRenderDimensions?: (out: number[]) => void
-    camera?: THREE.Camera
-  } | null>(null)
-  const yawRef = useRef(houseYawDeg)
+  const groundY = 0.05
+  const controlsRef = useRef<OrbitControls | null>(null)
   const widthRef = useRef(houseWidthFt)
-  const unitsRef = useRef(unitsPerFoot)
+  const yawRef = useRef(houseYawDeg)
   const texUrlRef = useRef<string | null>(null)
+  const frameRef = useRef<LocalFrame | null>(null)
+  const lotRingRef = useRef<[number, number][]>([])
 
   modeRef.current = mode
-  yawRef.current = houseYawDeg
   widthRef.current = houseWidthFt
-  unitsRef.current = unitsPerFoot
+  yawRef.current = houseYawDeg
 
   useEffect(() => {
     const mesh = houseRef.current
     if (!mesh) return
-    const w = houseWidthFt * unitsPerFoot
+    const w = houseWidthFt * FT_TO_M
     const aspect = (mesh.userData.aspect as number) || 1.6
     mesh.scale.set(w, w / aspect, 1)
     mesh.rotation.y = THREE.MathUtils.degToRad(houseYawDeg)
-    mesh.position.y =
-      (groundRef.current?.position.y ?? groundY) + mesh.scale.y / 2
-    const shadow = shadowRef.current
-    if (shadow && mesh.visible) {
-      shadow.position.set(mesh.position.x, groundY + 0.01, mesh.position.z)
-      const s = Math.max(mesh.scale.x, mesh.scale.y) * 0.45
-      shadow.scale.set(s, s, 1)
-    }
-  }, [houseWidthFt, houseYawDeg, unitsPerFoot, groundY])
+    mesh.position.y = groundY + mesh.scale.y / 2
+  }, [houseWidthFt, houseYawDeg])
 
   useEffect(() => {
     const mesh = houseRef.current
@@ -74,8 +76,7 @@ export default function StudioCanvas({
     if (texUrlRef.current === houseImageUrl) return
     texUrlRef.current = houseImageUrl
 
-    const loader = new THREE.TextureLoader()
-    loader.load(
+    new THREE.TextureLoader().load(
       houseImageUrl,
       (tex) => {
         tex.colorSpace = THREE.SRGBColorSpace
@@ -83,50 +84,158 @@ export default function StudioCanvas({
         const aspect = img.width / Math.max(1, img.height)
         mesh.userData.aspect = aspect
         const mat = mesh.material as THREE.MeshBasicMaterial
-        if (mat.map) mat.map.dispose()
+        mat.map?.dispose()
         mat.map = tex
         mat.transparent = true
         mat.needsUpdate = true
         mesh.visible = true
-        const w = widthRef.current * unitsRef.current
+        const w = widthRef.current * FT_TO_M
         mesh.scale.set(w, w / aspect, 1)
-        mesh.position.y =
-          (groundRef.current?.position.y ?? groundY) + mesh.scale.y / 2
-        const shadow = shadowRef.current
-        if (shadow) {
-          shadow.visible = true
-          shadow.position.set(mesh.position.x, groundY + 0.01, mesh.position.z)
-          const s = Math.max(mesh.scale.x, mesh.scale.y) * 0.45
-          shadow.scale.set(s, s, 1)
-        }
-        onStatus('House placed — drag to move, use the sliders to size and turn.')
+        mesh.position.y = groundY + mesh.scale.y / 2
+        onStatus('House on the lot — drag to move, set width in feet, turn to face the view.')
       },
       undefined,
-      () => onLoadError('Could not load the house photo into the scene.')
+      () => onLoadError('Could not load the house photo.')
     )
-  }, [houseImageUrl, groundY, onStatus, onLoadError])
+  }, [houseImageUrl, onStatus, onLoadError])
 
   useEffect(() => {
     const mount = mountRef.current
-    if (!mount) return
+    if (!mount || !lot.geometry) return
 
     let disposed = false
-    let viewer: InstanceType<
-      typeof import('@mkkellogg/gaussian-splats-3d').Viewer
-    > | null = null
-    let pointerCleanup: (() => void) | null = null
+    let raf = 0
+    let renderer: THREE.WebGLRenderer | null = null
 
-    const threeScene = new THREE.Scene()
+    const center = lotCentroid(lot)
+    const frame = makeFrame(center.lat, center.lng)
+    frameRef.current = frame
+    const lotRing = ringToLocal(lot.geometry.coordinates[0], frame)
+    lotRingRef.current = lotRing
 
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(80, 80),
+    let minX = Infinity,
+      maxX = -Infinity,
+      minZ = Infinity,
+      maxZ = -Infinity
+    for (const [x, z] of lotRing) {
+      minX = Math.min(minX, x)
+      maxX = Math.max(maxX, x)
+      minZ = Math.min(minZ, z)
+      maxZ = Math.max(maxZ, z)
+    }
+    const pad = Math.max(maxX - minX, maxZ - minZ) * 0.55
+    const west = center.lng + (minX - pad) / frame.mPerDegLng
+    const east = center.lng + (maxX + pad) / frame.mPerDegLng
+    const south = center.lat - (maxZ + pad) / frame.mPerDegLat
+    const north = center.lat - (minZ - pad) / frame.mPerDegLat
+
+    const scene = new THREE.Scene()
+    // Soft sky — not black void, not synthetic neon
+    scene.background = new THREE.Color(0xb8c7d4)
+    scene.fog = new THREE.Fog(0xb8c7d4, 180, 520)
+
+    const camera = new THREE.PerspectiveCamera(
+      50,
+      mount.clientWidth / Math.max(1, mount.clientHeight),
+      0.5,
+      2000
+    )
+    const span = Math.max(maxX - minX, maxZ - minZ, 40)
+    camera.position.set(span * 0.15, span * 0.85, span * 1.05)
+
+    renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      preserveDrawingBuffer: true,
+    })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(mount.clientWidth, mount.clientHeight)
+    mount.appendChild(renderer.domElement)
+
+    const controls = new OrbitControls(camera, renderer.domElement)
+    controls.target.set(0, 0, 0)
+    controls.enableDamping = true
+    controls.dampingFactor = 0.07
+    controls.maxPolarAngle = Math.PI * 0.48
+    controls.minDistance = 15
+    controls.maxDistance = span * 4
+    controlsRef.current = controls
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95))
+    const sun = new THREE.DirectionalLight(0xfff4e5, 0.85)
+    sun.position.set(40, 80, 20)
+    scene.add(sun)
+
+    // Ground plane in local meters covering the aerial bbox
+    const [gx0, gz0] = frame.toLocal(south, west)
+    const [gx1, gz1] = frame.toLocal(north, east)
+    const groundW = Math.abs(gx1 - gx0)
+    const groundD = Math.abs(gz1 - gz0)
+    const groundCx = (gx0 + gx1) / 2
+    const groundCz = (gz0 + gz1) / 2
+
+    const groundGeo = new THREE.PlaneGeometry(groundW, groundD, 1, 1)
+    groundGeo.rotateX(-Math.PI / 2)
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x8a7f68,
+      roughness: 1,
+      side: THREE.DoubleSide,
+    })
+    const ground = new THREE.Mesh(groundGeo, groundMat)
+    ground.position.set(groundCx, 0, groundCz)
+    ground.receiveShadow = true
+    scene.add(ground)
+
+    // Invisible raycast plane
+    const rayGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(2000, 2000),
       new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
     )
-    ground.rotation.x = -Math.PI / 2
-    ground.position.y = groundY
-    threeScene.add(ground)
-    groundRef.current = ground
+    rayGround.rotation.x = -Math.PI / 2
+    scene.add(rayGround)
 
+    // Lot fill
+    const shape = new THREE.Shape(lotRing.map(([x, z]) => new THREE.Vector2(x, z)))
+    const fillGeo = new THREE.ShapeGeometry(shape)
+    fillGeo.rotateX(-Math.PI / 2)
+    const fill = new THREE.Mesh(
+      fillGeo,
+      new THREE.MeshBasicMaterial({
+        color: 0xf2b04a,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+    )
+    fill.position.y = 0.04
+    scene.add(fill)
+
+    // Lot boundary line
+    const boundaryPts = lotRing.map(([x, z]) => new THREE.Vector3(x, 0.08, z))
+    boundaryPts.push(boundaryPts[0].clone())
+    scene.add(
+      new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(boundaryPts),
+        new THREE.LineBasicMaterial({ color: 0xf2b04a, linewidth: 2 })
+      )
+    )
+
+    // Neighbor outlines for context
+    for (const n of neighbors) {
+      if (!n.geometry) continue
+      const nRing = ringToLocal(n.geometry.coordinates[0], frame)
+      if (nRing.length < 3) continue
+      const pts = nRing.map(([x, z]) => new THREE.Vector3(x, 0.06, z))
+      pts.push(pts[0].clone())
+      scene.add(
+        new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(pts),
+          new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
+        )
+      )
+    }
+
+    // House cutout
     const houseMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -135,162 +244,174 @@ export default function StudioCanvas({
     })
     const house = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), houseMat)
     house.visible = false
-    house.position.set(0, groundY + 0.5, 0)
-    threeScene.add(house)
+    house.position.set(0, 1, 0)
+    scene.add(house)
     houseRef.current = house
     texUrlRef.current = null
 
     const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.5, 32),
+      new THREE.CircleGeometry(0.5, 40),
       new THREE.MeshBasicMaterial({
         color: 0x000000,
         transparent: true,
-        opacity: 0.28,
+        opacity: 0.22,
         depthWrite: false,
       })
     )
     shadow.rotation.x = -Math.PI / 2
-    shadow.position.y = groundY + 0.01
+    shadow.position.y = 0.03
     shadow.visible = false
-    threeScene.add(shadow)
-    shadowRef.current = shadow
+    scene.add(shadow)
 
-    ;(async () => {
-      try {
-        onStatus('Loading site capture…')
-        const GaussianSplats3D = await import('@mkkellogg/gaussian-splats-3d')
-        if (disposed || !mountRef.current) return
+    const syncShadow = () => {
+      if (!house.visible) {
+        shadow.visible = false
+        return
+      }
+      shadow.visible = true
+      shadow.position.x = house.position.x
+      shadow.position.z = house.position.z
+      const s = Math.max(house.scale.x, house.scale.y) * 0.4
+      shadow.scale.set(s, s, 1)
+    }
 
-        viewer = new GaussianSplats3D.Viewer({
-          rootElement: mount,
-          cameraUp: [0, 1, 0],
-          initialCameraPosition: [...STUDIO_WORLD.cameraPosition],
-          initialCameraLookAt: [...STUDIO_WORLD.cameraLookAt],
-          selfDrivenMode: true,
-          useBuiltInControls: true,
-          sharedMemoryForWorkers: false,
-          integerBasedSort: true,
-          threeScene,
-        })
-        viewerRef.current = viewer as unknown as typeof viewerRef.current
-
-        await viewer.addSplatScene(splatUrl, {
-          progressiveLoad: true,
-          showLoadingUI: false,
-          splatAlphaRemovalThreshold: 5,
-          ...(STUDIO_WORLD.splatRotationQuat
-            ? { rotation: STUDIO_WORLD.splatRotationQuat }
-            : {}),
-        })
-        if (disposed) return
-        viewer.start()
-        onStatus('Site capture ready — look around, then upload a house photo.')
-
-        // Placement raycasts against the invisible ground using the viewer's camera.
-        const raycaster = new THREE.Raycaster()
-        const pointer = new THREE.Vector2()
-        let dragging = false
-        const canvas = mount.querySelector('canvas')
-        if (!canvas) return
-
-        const setFromEvent = (e: PointerEvent) => {
-          const rect = canvas.getBoundingClientRect()
-          pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-          pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-        }
-
-        const moveHouse = (e: PointerEvent) => {
-          const cam = (viewer as unknown as { camera?: THREE.Camera }).camera
-          if (!cam || !house.visible) return
-          setFromEvent(e)
-          raycaster.setFromCamera(pointer, cam as THREE.PerspectiveCamera)
-          const hits = raycaster.intersectObject(ground, false)
-          if (!hits[0]) return
-          house.position.x = hits[0].point.x
-          house.position.z = hits[0].point.z
-          house.position.y = ground.position.y + house.scale.y / 2
-          shadow.visible = true
-          shadow.position.set(house.position.x, ground.position.y + 0.01, house.position.z)
-          const s = Math.max(house.scale.x, house.scale.y) * 0.45
-          shadow.scale.set(s, s, 1)
-        }
-
-        const onDown = (e: PointerEvent) => {
-          if (modeRef.current !== 'place' || !house.visible) return
-          dragging = true
-          const controls = (viewer as unknown as { controls?: { enabled: boolean } }).controls
-          if (controls) controls.enabled = false
-          canvas.setPointerCapture(e.pointerId)
-          moveHouse(e)
-        }
-        const onMove = (e: PointerEvent) => {
-          if (dragging) moveHouse(e)
-        }
-        const onUp = (e: PointerEvent) => {
-          if (!dragging) return
-          dragging = false
-          const controls = (viewer as unknown as { controls?: { enabled: boolean } }).controls
-          if (controls) controls.enabled = modeRef.current === 'look'
-          try {
-            canvas.releasePointerCapture(e.pointerId)
-          } catch {
-            /* ignore */
-          }
-        }
-
-        canvas.addEventListener('pointerdown', onDown)
-        canvas.addEventListener('pointermove', onMove)
-        canvas.addEventListener('pointerup', onUp)
-        canvas.addEventListener('pointercancel', onUp)
-        pointerCleanup = () => {
-          canvas.removeEventListener('pointerdown', onDown)
-          canvas.removeEventListener('pointermove', onMove)
-          canvas.removeEventListener('pointerup', onUp)
-          canvas.removeEventListener('pointercancel', onUp)
-        }
-      } catch (e) {
-        console.error(e)
-        onLoadError(
-          'Could not load the splat world. If you pointed ?splat= at a new file, check the URL and CORS.'
+    onStatus('Loading aerial photo of this lot…')
+    void loadAerialTexture({ south, west, north, east }).then((aerial) => {
+      if (disposed || !aerial) {
+        if (!disposed) onStatus('Aerial imagery unavailable — lot outline is still accurate. Upload a house photo to place.')
+        return
+      }
+      // Remap UVs so the plane matches the stitched aerial bbox
+      const uv = groundGeo.attributes.uv as THREE.BufferAttribute
+      // PlaneGeometry default UVs after rotateX(-90): need lat/lng corners
+      const corners: [number, number][] = [
+        [south, west],
+        [south, east],
+        [north, west],
+        [north, east],
+      ]
+      // Buffer order for PlaneGeometry(w,d): after rotateX, check indices
+      // Simpler: rebuild UVs from vertex XZ → lat/lng
+      const pos = groundGeo.attributes.position as THREE.BufferAttribute
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i) + ground.position.x
+        const z = pos.getZ(i) + ground.position.z
+        const lng = center.lng + x / frame.mPerDegLng
+        const lat = center.lat - z / frame.mPerDegLat
+        const [u, v] = aerialUV(lat, lng, aerial.bbox)
+        uv.setXY(i, u, v)
+      }
+      uv.needsUpdate = true
+      void corners
+      groundMat.map = aerial.texture
+      groundMat.color.set(0xffffff)
+      groundMat.needsUpdate = true
+      if (!disposed) {
+        onStatus(
+          `Lot ${lot.properties.name} ready — orbit to look around, then upload a house photo.`
         )
       }
-    })()
+    })
+
+    const raycaster = new THREE.Raycaster()
+    const pointer = new THREE.Vector2()
+    let dragging = false
+
+    const setFromEvent = (e: PointerEvent) => {
+      const rect = renderer!.domElement.getBoundingClientRect()
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+    }
+
+    const moveHouse = (e: PointerEvent) => {
+      if (!house.visible) return
+      setFromEvent(e)
+      raycaster.setFromCamera(pointer, camera)
+      const hits = raycaster.intersectObject(rayGround, false)
+      if (!hits[0]) return
+      house.position.x = hits[0].point.x
+      house.position.z = hits[0].point.z
+      house.position.y = groundY + house.scale.y / 2
+      syncShadow()
+    }
+
+    const onDown = (e: PointerEvent) => {
+      if (modeRef.current !== 'place' || !house.visible) return
+      dragging = true
+      controls.enabled = false
+      renderer!.domElement.setPointerCapture(e.pointerId)
+      moveHouse(e)
+    }
+    const onMove = (e: PointerEvent) => {
+      if (dragging) moveHouse(e)
+    }
+    const onUp = (e: PointerEvent) => {
+      if (!dragging) return
+      dragging = false
+      controls.enabled = modeRef.current === 'look'
+      try {
+        renderer!.domElement.releasePointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
+    }
+
+    renderer.domElement.addEventListener('pointerdown', onDown)
+    renderer.domElement.addEventListener('pointermove', onMove)
+    renderer.domElement.addEventListener('pointerup', onUp)
+    renderer.domElement.addEventListener('pointercancel', onUp)
+
+    const onResize = () => {
+      if (!renderer || !mount) return
+      camera.aspect = mount.clientWidth / Math.max(1, mount.clientHeight)
+      camera.updateProjectionMatrix()
+      renderer.setSize(mount.clientWidth, mount.clientHeight)
+    }
+    window.addEventListener('resize', onResize)
+
+    const tick = () => {
+      if (disposed) return
+      controls.update()
+      syncShadow()
+      renderer!.render(scene, camera)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
 
     return () => {
       disposed = true
-      pointerCleanup?.()
-      void viewer?.dispose()
-      viewerRef.current = null
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', onResize)
+      renderer?.domElement.removeEventListener('pointerdown', onDown)
+      renderer?.domElement.removeEventListener('pointermove', onMove)
+      renderer?.domElement.removeEventListener('pointerup', onUp)
+      renderer?.domElement.removeEventListener('pointercancel', onUp)
+      controls.dispose()
+      controlsRef.current = null
+      groundGeo.dispose()
+      groundMat.map?.dispose()
+      groundMat.dispose()
+      fillGeo.dispose()
+      ;(fill.material as THREE.Material).dispose()
       houseMat.map?.dispose()
       houseMat.dispose()
       house.geometry.dispose()
-      ground.geometry.dispose()
-      ;(ground.material as THREE.Material).dispose()
       shadow.geometry.dispose()
       ;(shadow.material as THREE.Material).dispose()
+      rayGround.geometry.dispose()
+      ;(rayGround.material as THREE.Material).dispose()
+      renderer?.dispose()
+      if (renderer?.domElement.parentElement === mount) {
+        mount.removeChild(renderer.domElement)
+      }
       houseRef.current = null
-      groundRef.current = null
-      shadowRef.current = null
-      // Viewer owns the canvas element it created under mount.
-      while (mount.firstChild) mount.removeChild(mount.firstChild)
     }
-  }, [splatUrl, onStatus, onLoadError])
+  }, [lot, neighbors, onStatus, onLoadError])
 
   useEffect(() => {
-    const controls = viewerRef.current?.controls
+    const controls = controlsRef.current
     if (controls) controls.enabled = mode === 'look'
   }, [mode])
-
-  useEffect(() => {
-    const ground = groundRef.current
-    const house = houseRef.current
-    const shadow = shadowRef.current
-    if (ground) ground.position.y = groundY
-    if (house?.visible) {
-      house.position.y = groundY + house.scale.y / 2
-    }
-    if (shadow) shadow.position.y = groundY + 0.01
-  }, [groundY])
 
   return (
     <div
