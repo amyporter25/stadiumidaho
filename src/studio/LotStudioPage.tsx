@@ -394,7 +394,7 @@ export default function LotStudioPage() {
         {loadError ? <span style={{ color: '#8b2e2e' }}>{loadError}</span> : status}
         {cutout.error && <div style={{ color: '#6b4e16', marginTop: 4 }}>{cutout.error}</div>}
         <div style={{ marginTop: 6, opacity: 0.65, fontSize: 11 }}>
-          Elevation facade · driveway from street · landscaping · estimates only
+          Photoreal builder elevations · driveway · landscaping · estimates only
         </div>
       </div>
     </div>
