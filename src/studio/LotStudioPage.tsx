@@ -160,6 +160,9 @@ export default function LotStudioPage() {
               ))}
             </select>
           </label>
+          <Link to="/studio/sample" style={linkBtn}>
+            Footage sample
+          </Link>
           <Link to="/" style={linkBtn}>
             ← Marketing site
           </Link>
