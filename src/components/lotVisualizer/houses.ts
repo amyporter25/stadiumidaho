@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { FT_TO_M } from './geo'
 import { getPlan } from '../../data/plans'
+import { buildWhitestoneHouse } from './whitestoneHouse'
 
 /**
  * Recognizable 3D massings for Blackstone plans.
@@ -64,7 +65,8 @@ const SPECS: Record<string, HouseSpec> = {
     depthFt: 70,
     wallM: 3.2,
     roofRiseM: 2.9,
-    garageWing: 'right',
+    // ArchyBase / builder refs: tall RV + two-car on the street-left
+    garageWing: 'left',
     garageEntry: 'front',
     garageWidthFrac: 0.42,
     garageHeightM: 4.6,
@@ -94,7 +96,7 @@ const SPECS: Record<string, HouseSpec> = {
     depthFt: 70,
     wallM: 3.2,
     roofRiseM: 2.9,
-    garageWing: 'right',
+    garageWing: 'left',
     garageEntry: 'front',
     garageWidthFrac: 0.42,
     garageHeightM: 4.6,
@@ -287,7 +289,16 @@ function resolveSpec(planId: string): HouseSpec {
   return SPECS[planId] ?? SPECS.brownstone
 }
 
+function isWhitestoneFront(planId: string): boolean {
+  return planId === 'whitestone-front' || planId === 'whitestone'
+}
+
 export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.Group {
+  // Dedicated Whitestone exterior from front/rear + dollhouse refs
+  if (isWhitestoneFront(planId)) {
+    return buildWhitestoneHouse()
+  }
+
   const facadeMode = !!opts.facadeMode
   const spec = resolveSpec(planId)
   const W = spec.widthFt * FT_TO_M
@@ -471,11 +482,18 @@ export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.
 }
 
 /**
- * Studio house: plan footprint massing + photoreal street facade plane.
- * From the curb you see the marketing elevation; orbiting reveals depth.
+ * Studio house: plan footprint massing.
+ * Whitestone uses a dedicated exterior (no photo card). Other plans may still
+ * get a photoreal street-facade plane for the marketing elevation.
  */
 export function buildStudioHouse(planId: string): THREE.Group {
   const house = buildHouse(planId, { facadeMode: true })
+
+  // Whitestone is already a full street-readable exterior — skip photo overlay
+  if (isWhitestoneFront(planId) || house.getObjectByName('streetFacade')) {
+    return house
+  }
+
   const W = house.userData.widthM as number
   const D = house.userData.depthM as number
   const wallM = house.userData.wallM as number

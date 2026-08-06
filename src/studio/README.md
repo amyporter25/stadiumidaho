@@ -14,8 +14,9 @@ Default experience:
 2. See **real aerial photography** of that homesite
 3. See the **lot boundary** (and neighbors) from the plat GeoJSON
 4. **Drop a builder plan** (primary) — Brownstone or Whitestone — as a **3D
-   massing from the plan footprint**, with the **photoreal marketing elevation**
-   on the street face (background and plan name stripped from the render)
+   massing from the plan footprint**. Whitestone uses a dedicated exterior
+   (RV + two-car on the street-left, timber entry, rear glass gable). Brownstone
+   still uses a photoreal street facade on the massing when available.
 5. **Driveway** auto-simulates from the street front to the garage apron, with
    a ballpark concrete/asphalt cost that updates as you move the house
 6. **Landscaping** mode places trees, evergreens, shrubs, and lawn patches

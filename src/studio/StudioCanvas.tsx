@@ -242,13 +242,13 @@ export default function StudioCanvas({
     syncDrivewayRef.current()
   }
 
-  /** Builder plan → 3D footprint massing + photoreal street facade. */
+  /** Builder plan → 3D footprint massing (+ optional photoreal street facade). */
   const loadPlanHouse = (planId: string, statusMsg: string, frameView = false) => {
     const anchor = anchorRef.current
     if (!anchor) return
     const plan = getPlan(planId)
-    if (!plan?.cutoutImg) {
-      onLoadError('This plan is missing a house image.')
+    if (!plan) {
+      onLoadError('Unknown builder plan.')
       return
     }
 
@@ -260,8 +260,18 @@ export default function StudioCanvas({
     anchor.add(house)
     massingRef.current = house
     anchor.visible = true
-    texUrlRef.current = plan.cutoutImg
 
+    const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
+    // Whitestone (and any plan without a facade plane) is pure 3D — no photo card
+    if (!facade || !plan.cutoutImg) {
+      texUrlRef.current = `massing:${planId}`
+      syncTransform()
+      if (frameView) frameHouseStreetView()
+      onStatus(statusMsg)
+      return
+    }
+
+    texUrlRef.current = plan.cutoutImg
     new THREE.TextureLoader().load(
       plan.cutoutImg,
       (tex) => {
@@ -392,9 +402,12 @@ export default function StudioCanvas({
     onYawSuggest(yawDeg)
     yawRef.current = yawDeg
 
+    const isWhitestone = planId === 'whitestone-front' || planId === 'whitestone'
     loadPlanHouse(
       planId,
-      `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`,
+      isWhitestone
+        ? `${plan.name} on the lot — 3D exterior (RV + garage on the left). Orbit to walk around; drag to move.`
+        : `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`,
       true
     )
   }, [planId, houseImageUrl, onStatus, onYawSuggest, onDrivewayChange, onLoadError])
@@ -763,7 +776,7 @@ export default function StudioCanvas({
       onYawSuggest(yawDeg)
       yawRef.current = yawDeg
       widthRef.current = houseWidthFt
-      if (plan?.cutoutImg) {
+      if (plan) {
         // Seat near street on first scene boot with a plan already selected
         const inwardX = 0 - frontMid[0]
         const inwardZ = 0 - frontMid[1]
@@ -776,7 +789,7 @@ export default function StudioCanvas({
         )
         loadPlanHouse(
           planId,
-          `${plan.name} on the lot — 3D massing with the real front elevation.`,
+          `${plan.name} on the lot — 3D exterior from the builder plan.`,
           true
         )
       }
