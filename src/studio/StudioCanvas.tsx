@@ -183,8 +183,8 @@ export default function StudioCanvas({
         if (plan?.garageEntry === 'side') {
           approach.position.set(garageX - Math.sign(garageX || 1) * 0.5, 0, 0.25)
         } else {
-          // Flush with / slightly under the facade plane
-          approach.position.set(garageX, 0, 0.5)
+          // On the facade plane — tip overshoot in syncDriveway pulls pave under the door
+          approach.position.set(garageX, 0, 0.15)
         }
       }
     } else if (apronRef.current) {
@@ -596,8 +596,8 @@ export default function StudioCanvas({
       const uz = dz / len
 
       // Push tip well under the facade / garage door so pavement meets the house
-      const tipX = worldDoor.x + ux * 2.5
-      const tipZ = worldDoor.z + uz * 2.5
+      const tipX = worldDoor.x + ux * 4.0
+      const tipZ = worldDoor.z + uz * 4.0
       dx = tipX - fx
       dz = tipZ - fz
       len = Math.hypot(dx, dz)
