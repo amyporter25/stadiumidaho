@@ -176,35 +176,34 @@ export default function StudioCanvas({
         pad.scale.set(w, depthFt * FT_TO_M, 1)
       }
 
-      // Driveway tip = garage door on the facade. Local −z faces the street;
-      // a small +z tuck puts the ribbon under the door so there’s no gap.
+      // Driveway tip = garage door on the facade.
+      // Cutout mesh is rotated Y=π so the texture faces −z (street); that also
+      // mirrors +x, so image-right (garage) is at local −x in anchor space.
       const approach = approachRef.current
       const plan = planIdRef.current ? getPlan(planIdRef.current) : null
       const garageFrac = plan?.garageXFrac ?? 0.35
-      const apronDepth = Math.max(5.5, w * 0.14) // ~18–22 ft apron
+      const garageX = -garageFrac * w
+      const apronDepth = Math.max(7, w * 0.16) // ~23–28 ft apron to the door
       if (approach) {
         if (plan?.garageEntry === 'side') {
-          // Side-entry: approach the side of the garage wing
-          approach.position.set(garageFrac * w - Math.sign(garageFrac || -1) * 1.2, 0, h * 0.02)
+          // Side-entry: pull up beside the garage wing
+          approach.position.set(garageX - Math.sign(garageX || 1) * 0.5, 0, 0.2)
         } else {
-          approach.position.set(garageFrac * w, 0, 0.35)
+          // Front garage: tip tucked just under/into the facade so ribbon meets the door
+          approach.position.set(garageX, 0, 0.6)
         }
       }
       const apron = apronRef.current
       if (apron) {
-        const apronW = Math.max(6.5, w * 0.24)
+        const apronW = Math.max(7.5, w * 0.26)
         apron.visible = true
         if (plan?.garageEntry === 'side') {
           apron.scale.set(apronDepth, 1, apronW)
-          apron.position.set(
-            garageFrac * w - Math.sign(garageFrac || -1) * (apronDepth / 2),
-            0.04,
-            0
-          )
+          apron.position.set(garageX - Math.sign(garageX || 1) * (apronDepth / 2), 0.045, 0.15)
         } else {
           apron.scale.set(apronW, 1, apronDepth)
-          // From just under the facade out toward the street (−z)
-          apron.position.set(garageFrac * w, 0.04, -apronDepth / 2 + 0.4)
+          // Apron from street toward facade, overlapping the door so no grass gap
+          apron.position.set(garageX, 0.045, -apronDepth / 2 + 1.0)
         }
       }
     } else if (apronRef.current) {
@@ -239,7 +238,8 @@ export default function StudioCanvas({
       mat.map = tex
       mat.color.set(0xffffff)
       mat.transparent = true
-      mat.alphaTest = 0.2
+      // Low alphaTest — high values chewed holes in bright windows/siding
+      mat.alphaTest = 0.05
       mat.depthWrite = false
       mat.side = THREE.DoubleSide
       mat.needsUpdate = true
