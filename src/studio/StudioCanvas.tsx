@@ -109,6 +109,7 @@ export default function StudioCanvas({
   const anchorRef = useRef<THREE.Group | null>(null)
   const cutoutRef = useRef<THREE.Mesh | null>(null)
   const approachRef = useRef<THREE.Object3D | null>(null)
+  const apronRef = useRef<THREE.Mesh | null>(null)
   const shadowRef = useRef<THREE.Mesh | null>(null)
   const drivewayRef = useRef<THREE.Mesh | null>(null)
   const landscapeRef = useRef<THREE.Group | null>(null)
@@ -175,14 +176,39 @@ export default function StudioCanvas({
         pad.scale.set(w, depthFt * FT_TO_M, 1)
       }
 
-      // Garage apron target for the driveway (marketing renders put garage on the right;
-      // side-entry plans aim toward the left wing).
+      // Driveway tip = garage door on the facade. Local −z faces the street;
+      // a small +z tuck puts the ribbon under the door so there’s no gap.
       const approach = approachRef.current
+      const plan = planIdRef.current ? getPlan(planIdRef.current) : null
+      const garageFrac = plan?.garageXFrac ?? 0.35
+      const apronDepth = Math.max(5.5, w * 0.14) // ~18–22 ft apron
       if (approach) {
-        const plan = planIdRef.current ? getPlan(planIdRef.current) : null
-        const side = plan?.garageEntry === 'side' ? -1 : 1
-        approach.position.set(side * w * 0.32, 0, -Math.max(1.2, h * 0.08))
+        if (plan?.garageEntry === 'side') {
+          // Side-entry: approach the side of the garage wing
+          approach.position.set(garageFrac * w - Math.sign(garageFrac || -1) * 1.2, 0, h * 0.02)
+        } else {
+          approach.position.set(garageFrac * w, 0, 0.35)
+        }
       }
+      const apron = apronRef.current
+      if (apron) {
+        const apronW = Math.max(6.5, w * 0.24)
+        apron.visible = true
+        if (plan?.garageEntry === 'side') {
+          apron.scale.set(apronDepth, 1, apronW)
+          apron.position.set(
+            garageFrac * w - Math.sign(garageFrac || -1) * (apronDepth / 2),
+            0.04,
+            0
+          )
+        } else {
+          apron.scale.set(apronW, 1, apronDepth)
+          // From just under the facade out toward the street (−z)
+          apron.position.set(garageFrac * w, 0.04, -apronDepth / 2 + 0.4)
+        }
+      }
+    } else if (apronRef.current) {
+      apronRef.current.visible = false
     }
 
     const shadow = shadowRef.current
@@ -213,7 +239,7 @@ export default function StudioCanvas({
       mat.map = tex
       mat.color.set(0xffffff)
       mat.transparent = true
-      mat.alphaTest = 0.12
+      mat.alphaTest = 0.2
       mat.depthWrite = false
       mat.side = THREE.DoubleSide
       mat.needsUpdate = true
@@ -485,8 +511,8 @@ export default function StudioCanvas({
     cutout.position.set(0, 1, 0)
     // Face the street (−z): PlaneGeometry faces +z by default
     cutout.rotation.y = Math.PI
-    // Slight lean so the facade still peeks when glancing from above
-    cutout.rotation.x = -0.08
+    // Tiny lean so the facade still peeks when glancing from above
+    cutout.rotation.x = -0.04
     anchor.add(cutout)
     cutoutRef.current = cutout
     texUrlRef.current = null
@@ -509,9 +535,22 @@ export default function StudioCanvas({
 
     const approach = new THREE.Object3D()
     approach.name = 'garageApproach'
-    approach.position.set(0, 0, -1.2)
+    // Tip of the driveway — at the garage door on the facade (updated in syncTransform)
+    approach.position.set(0, 0, 0)
     anchor.add(approach)
     approachRef.current = approach
+
+    const apronMat = new THREE.MeshStandardMaterial({
+      color: 0x9a9890,
+      roughness: 0.95,
+      metalness: 0.02,
+    })
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), apronMat)
+    apron.receiveShadow = true
+    apron.visible = false
+    apron.name = 'garageApron'
+    anchor.add(apron)
+    apronRef.current = apron
 
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.5, 40),
@@ -550,6 +589,7 @@ export default function StudioCanvas({
     const syncDriveway = () => {
       if (!drivewayRef.current || !anchorRef.current?.visible || !cutoutRef.current?.visible) {
         if (drivewayRef.current) drivewayRef.current.visible = false
+        if (apronRef.current) apronRef.current.visible = false
         onDrivewayChange(null)
         return
       }
@@ -566,19 +606,26 @@ export default function StudioCanvas({
       const len = Math.hypot(dx, dz)
       if (len < 0.5) {
         driveway.visible = false
+        if (apronRef.current) apronRef.current.visible = false
         onDrivewayChange(null)
         return
       }
 
+      // Driveway ribbon: street curb → garage door (runs the full length to the house)
       const widthM = 14 * FT_TO_M
+      const isConcrete = materialRef.current === 'concrete'
       driveway.visible = true
       driveway.position.set((fx + worldApproach.x) / 2, 0.05, (fz + worldApproach.z) / 2)
       driveway.scale.set(widthM, 1, len)
       driveway.rotation.y = Math.atan2(dx, dz)
-      asphaltMap.repeat.set(widthM / 2, len / 2)
+      asphaltMap.repeat.set(widthM / 2, Math.max(1, len / 2))
       asphaltMap.needsUpdate = true
+      drivewayMat.color.set(isConcrete ? 0xb0aea8 : 0xffffff)
 
-      drivewayMat.color.set(materialRef.current === 'concrete' ? 0xb0aea8 : 0xffffff)
+      if (apronRef.current) {
+        const am = apronRef.current.material as THREE.MeshStandardMaterial
+        am.color.set(isConcrete ? 0xa8a69e : 0x5a5a5c)
+      }
 
       onDrivewayChange(estimateDriveway(len, materialRef.current))
     }
@@ -770,6 +817,8 @@ export default function StudioCanvas({
       driveway.geometry.dispose()
       drivewayMat.dispose()
       asphaltMap.dispose()
+      apron.geometry.dispose()
+      apronMat.dispose()
       rayGround.geometry.dispose()
       ;(rayGround.material as THREE.Material).dispose()
       curb.geometry.dispose()
@@ -781,6 +830,7 @@ export default function StudioCanvas({
       anchorRef.current = null
       cutoutRef.current = null
       approachRef.current = null
+      apronRef.current = null
       shadowRef.current = null
       drivewayRef.current = null
       cameraRef.current = null

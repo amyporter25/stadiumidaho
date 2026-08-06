@@ -20,6 +20,12 @@ export interface HomePlan {
   baths: string
   garage: string
   garageEntry: GarageEntry
+  /**
+   * Horizontal garage-door center on the front elevation, as a fraction of
+   * house width from center (−0.5 left … +0.5 right). Used so the driveway
+   * aims at the garage, not the front door.
+   */
+  garageXFrac: number
   porches: string[]
   highlights: string[]
   // Approximate building footprint from the dimensioned floor plan —
@@ -38,8 +44,8 @@ export const homePlans: HomePlan[] = [
     name: 'The Brownstone',
     subtitle: 'Front-facing garage + RV bay',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/brownstone-elevation.jpg?v=drive1',
-    cutoutImg: '/plans/cutouts/brownstone.png?v=drive1',
+    elevationImg: '/plans/brownstone-elevation.jpg?v=drive2',
+    cutoutImg: '/plans/cutouts/brownstone.png?v=drive2',
     floorplanImg: '/plans/thumbs/brownstone-floorplan.jpg',
     pdfUrl: '/plans/brownstone-15-2-rwr.pdf',
     livingArea: '~2,880 sq ft living',
@@ -47,6 +53,8 @@ export const homePlans: HomePlan[] = [
     baths: '3.5 baths',
     garage: 'Garage + tall RV bay (both front-facing)',
     garageEntry: 'front',
+    // Marketing elevation: garage door sits on the far right
+    garageXFrac: 0.38,
     porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Great room open to kitchen and dining',
@@ -63,8 +71,8 @@ export const homePlans: HomePlan[] = [
     name: 'The Whitestone',
     subtitle: 'Front-facing garage',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/whitestone-elevation.jpg?v=drive1',
-    cutoutImg: '/plans/cutouts/whitestone.png?v=drive1',
+    elevationImg: '/plans/whitestone-elevation.jpg?v=drive2',
+    cutoutImg: '/plans/cutouts/whitestone.png?v=drive2',
     floorplanImg: '/plans/thumbs/whitestone-front-floorplan.jpg',
     pdfUrl: '/plans/whitestone-7-2-rwr.pdf',
     livingArea: '~2,140 sq ft living',
@@ -72,6 +80,7 @@ export const homePlans: HomePlan[] = [
     baths: '2.5 baths',
     garage: 'Two-car garage + tall RV bay (both front-facing)',
     garageEntry: 'front',
+    garageXFrac: 0.4,
     porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Modern farmhouse elevation with timber-truss entry',
@@ -89,8 +98,8 @@ export const homePlans: HomePlan[] = [
     builder: 'Blackstone Homes',
     // Side-entry plan uses the same Whitestone marketing render until a
     // dedicated side-entry exterior photo is supplied.
-    elevationImg: '/plans/whitestone-elevation.jpg?v=drive1',
-    cutoutImg: '/plans/cutouts/whitestone.png?v=drive1',
+    elevationImg: '/plans/whitestone-elevation.jpg?v=drive2',
+    cutoutImg: '/plans/cutouts/whitestone.png?v=drive2',
     floorplanImg: '/plans/thumbs/whitestone-side-floorplan.jpg',
     pdfUrl: '/plans/whitestone-29-3-pse.pdf',
     livingArea: '~2,140 sq ft living',
@@ -98,6 +107,8 @@ export const homePlans: HomePlan[] = [
     baths: '2.5 baths',
     garage: 'Side-entry two-car + front-facing tall RV bay',
     garageEntry: 'side',
+    // Side-entry: approach the left wing until a dedicated elevation is supplied
+    garageXFrac: -0.36,
     porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Same Whitestone living layout, side-loaded garage',
