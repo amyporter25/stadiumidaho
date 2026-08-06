@@ -172,8 +172,9 @@ headlessly, but three.js scenes can:
 Greenfield experience at **`/studio`**. See `src/studio/README.md`.
 
 **Current default (lot-first):** aerial imagery + plat outline + **builder plan
-drop-in** (Brownstone, Whitestone front garage, Whitestone side-entry) with
-optional house photo cutout as the custom path.
+drop-in** (Brownstone, Whitestone front/side) with elevation facades draped on
+textured massings, **street→garage driveway** length/cost estimate, and
+**landscaping** placement. Optional house photo cutout remains the custom path.
 Construction PDFs: `public/plans/*-{rwr,pse}.pdf`. Catalog: `src/data/plans.ts`.
 The Polycam site-wide Gaussian splat was tried and rejected as a “blotchy blob” —
 kept on disk (`public/splats/stadium-3d-two.splat`) but not shown by default.

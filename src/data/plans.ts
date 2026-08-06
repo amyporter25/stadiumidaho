@@ -7,6 +7,8 @@ export interface HomePlan {
   builder: string
   /** Front elevation crop for picker / marketing cards */
   elevationImg: string
+  /** Transparent elevation drape used on the 3D facade */
+  facadeImg: string
   floorplanImg: string
   /** Full construction PDF (builder-supplied) */
   pdfUrl: string
@@ -34,6 +36,7 @@ export const homePlans: HomePlan[] = [
     subtitle: 'Front-facing garage + RV bay',
     builder: 'Blackstone Homes',
     elevationImg: '/plans/thumbs/brownstone.jpg',
+    facadeImg: '/plans/facades/brownstone.jpg',
     floorplanImg: '/plans/thumbs/brownstone-floorplan.jpg',
     pdfUrl: '/plans/brownstone-15-2-rwr.pdf',
     livingArea: '~2,880 sq ft living',
@@ -58,6 +61,7 @@ export const homePlans: HomePlan[] = [
     subtitle: 'Front-facing garage',
     builder: 'Blackstone Homes',
     elevationImg: '/plans/thumbs/whitestone-front.jpg',
+    facadeImg: '/plans/facades/whitestone-front.jpg',
     floorplanImg: '/plans/thumbs/whitestone-front-floorplan.jpg',
     pdfUrl: '/plans/whitestone-7-2-rwr.pdf',
     livingArea: '~2,140 sq ft living',
@@ -81,6 +85,7 @@ export const homePlans: HomePlan[] = [
     subtitle: 'Side-entry garage',
     builder: 'Blackstone Homes',
     elevationImg: '/plans/thumbs/whitestone-side.jpg',
+    facadeImg: '/plans/facades/whitestone-side.jpg',
     floorplanImg: '/plans/thumbs/whitestone-side-floorplan.jpg',
     pdfUrl: '/plans/whitestone-29-3-pse.pdf',
     livingArea: '~2,140 sq ft living',

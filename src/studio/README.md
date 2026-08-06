@@ -14,8 +14,13 @@ Default experience:
 2. See **real aerial photography** of that homesite
 3. See the **lot boundary** (and neighbors) from the plat GeoJSON
 4. **Drop a builder plan** (primary) — Brownstone, Whitestone front garage,
-   or Whitestone side-entry — as a scaled 3D massing on the lot
-5. Or **upload a house photo** → background cutout → place/scale/rotate in feet
+   or Whitestone side-entry — textured 3D massing with the builder elevation
+   draped on the street facade
+5. **Driveway** auto-simulates from the street front to the garage apron, with
+   a ballpark concrete/asphalt cost that updates as you move the house
+6. **Landscaping** mode places trees, evergreens, shrubs, and lawn patches
+   (also tallied as a rough extras estimate)
+7. Or **upload a house photo** → background cutout → place/scale/rotate in feet
 
 ## Builder plans
 

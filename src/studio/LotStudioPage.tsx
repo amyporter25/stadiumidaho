@@ -5,6 +5,13 @@ import { resolveLotName, resolveWorldMode, STUDIO_WORLD } from './config'
 import { useHouseCutout } from './useHouseCutout'
 import { useStadiumLots, type StadiumLotFeature } from '../components/LotMap'
 import { studioPlans, type HomePlan } from '../data/plans'
+import {
+  formatUsd,
+  PLANT_LABELS,
+  type DrivewayEstimate,
+  type DrivewayMaterial,
+  type PlantKind,
+} from './costs'
 
 function centroid(feature: StadiumLotFeature): { lat: number; lng: number } | null {
   if (feature.properties.label) {
@@ -23,7 +30,7 @@ function centroid(feature: StadiumLotFeature): { lat: number; lng: number } | nu
 
 /**
  * Track B — Lot Studio (lot-first).
- * Aerial + plat lines + builder plan drop-in (primary) or house photo (alternate).
+ * Aerial + plat + textured builder plans + driveway estimate + landscaping.
  */
 export default function LotStudioPage() {
   const location = useLocation()
@@ -62,6 +69,12 @@ export default function LotStudioPage() {
   const [planId, setPlanId] = useState<string | null>(null)
   const [widthFt, setWidthFt] = useState(STUDIO_WORLD.defaultHouseWidthFt)
   const [yawDeg, setYawDeg] = useState(0)
+  const [driveway, setDriveway] = useState<DrivewayEstimate | null>(null)
+  const [drivewayMaterial, setDrivewayMaterial] = useState<DrivewayMaterial>('concrete')
+  const [plantKind, setPlantKind] = useState<PlantKind>('tree')
+  const [landscapeUsd, setLandscapeUsd] = useState(0)
+  const [landscapeCount, setLandscapeCount] = useState(0)
+  const [landscapeRevision, setLandscapeRevision] = useState(0)
 
   const cutout = useHouseCutout()
   const houseActive = Boolean(planId || cutout.objectUrl)
@@ -71,7 +84,6 @@ export default function LotStudioPage() {
     cutout.clear()
     setPlanId(plan.id)
     setWidthFt(plan.footprintFt.width)
-    setYawDeg(0)
     setMode('place')
     setLoadError(null)
   }, [cutout])
@@ -82,6 +94,7 @@ export default function LotStudioPage() {
     setMode('look')
     setWidthFt(STUDIO_WORLD.defaultHouseWidthFt)
     setYawDeg(0)
+    setDriveway(null)
   }, [cutout])
 
   const onFile = useCallback(
@@ -101,6 +114,7 @@ export default function LotStudioPage() {
     q.delete('world')
     navigate({ pathname: '/studio', search: q.toString() })
     clearHouse()
+    setLandscapeRevision((n) => n + 1)
     setLoadError(null)
   }
 
@@ -121,17 +135,12 @@ export default function LotStudioPage() {
             The site-wide Gaussian splat reads as a blotchy blob in the browser — not a
             usable lot. Lot Studio now defaults to aerial photo + plat lines instead.
           </p>
-          <p style={{ opacity: 0.7, fontSize: 14 }}>
-            If you still want to inspect the raw capture:{' '}
-            <a href={STUDIO_WORLD.polycamUrl} target="_blank" rel="noreferrer" style={{ color: '#c4a574' }}>
-              open it on Polycam
-            </a>
-            .
-          </p>
         </div>
       </div>
     )
   }
+
+  const siteExtras = (driveway?.costUsd ?? 0) + landscapeUsd
 
   return (
     <div style={shell}>
@@ -144,8 +153,17 @@ export default function LotStudioPage() {
           houseImageUrl={planId ? null : cutout.objectUrl}
           houseWidthFt={widthFt}
           houseYawDeg={yawDeg}
+          plantKind={plantKind}
+          drivewayMaterial={drivewayMaterial}
+          landscapeRevision={landscapeRevision}
           onStatus={setStatus}
           onLoadError={setLoadError}
+          onDrivewayChange={setDriveway}
+          onLandscapeCostChange={(usd, count) => {
+            setLandscapeUsd(usd)
+            setLandscapeCount(count)
+          }}
+          onYawSuggest={setYawDeg}
         />
       ) : (
         <div style={{ padding: 48 }}>Loading lots…</div>
@@ -190,9 +208,6 @@ export default function LotStudioPage() {
           <Link to="/studio/earth" style={linkBtn}>
             Neighborhood map
           </Link>
-          <Link to="/studio/sample" style={linkBtn}>
-            Footage sample
-          </Link>
           <Link to="/" style={linkBtn}>
             ← Marketing site
           </Link>
@@ -232,18 +247,47 @@ export default function LotStudioPage() {
                 <div style={{ padding: '8px 10px', textAlign: 'left' }}>
                   <div style={{ fontSize: 13, fontWeight: 650 }}>{plan.name}</div>
                   <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{plan.subtitle}</div>
-                  <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }}>
-                    {plan.footprintFt.width}′ × {plan.footprintFt.depth}′
-                  </div>
                 </div>
               </button>
             )
           })}
         </div>
-        <p style={{ fontSize: 11, opacity: 0.55, marginTop: 10, lineHeight: 1.4 }}>
-          Drop a Blackstone plan on this lot. Massing is approximate — not a survey.
-        </p>
       </aside>
+
+      {(driveway || landscapeCount > 0) && (
+        <aside style={costCard} aria-live="polite">
+          <div style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', opacity: 0.55 }}>
+            Site extras (est.)
+          </div>
+          {driveway && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 650 }}>
+                Driveway · {Math.round(driveway.lengthFt)} ft
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                {Math.round(driveway.areaSqFt)} sq ft {driveway.material} · {formatUsd(driveway.costUsd)}
+              </div>
+            </div>
+          )}
+          {landscapeCount > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 650 }}>
+                Landscaping · {landscapeCount} items
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                {formatUsd(landscapeUsd)}
+              </div>
+            </div>
+          )}
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(26,28,30,0.12)' }}>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>Extras total</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{formatUsd(siteExtras)}</div>
+            <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4, lineHeight: 1.35 }}>
+              Ballpark only — confirm with builder. Does not include home price or lot.
+            </div>
+          </div>
+        </aside>
+      )}
 
       <div style={dock}>
         <Segmented
@@ -252,10 +296,38 @@ export default function LotStudioPage() {
           options={[
             { id: 'look', label: 'Look around' },
             { id: 'place', label: 'Move house', disabled: !houseActive },
+            { id: 'plant', label: 'Landscaping' },
           ]}
         />
 
-        {houseActive && (
+        {mode === 'plant' && (
+          <>
+            {(Object.keys(PLANT_LABELS) as PlantKind[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setPlantKind(k)}
+                style={{
+                  ...chipBtn,
+                  background: plantKind === k ? '#1a1c1e' : 'transparent',
+                  color: plantKind === k ? '#f4f1ea' : '#1a1c1e',
+                }}
+              >
+                {PLANT_LABELS[k]}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setLandscapeRevision((n) => n + 1)}
+              style={ghostBtn}
+              disabled={landscapeCount === 0}
+            >
+              Clear plants
+            </button>
+          </>
+        )}
+
+        {houseActive && mode !== 'plant' && (
           <>
             <Slider
               label={`Width ${widthFt} ft`}
@@ -271,6 +343,23 @@ export default function LotStudioPage() {
               value={yawDeg}
               onChange={setYawDeg}
             />
+            <label style={{ fontSize: 11, opacity: 0.75, display: 'flex', gap: 6, alignItems: 'center' }}>
+              Driveway
+              <select
+                value={drivewayMaterial}
+                onChange={(e) => setDrivewayMaterial(e.target.value as DrivewayMaterial)}
+                style={{
+                  fontSize: 12,
+                  padding: '4px 6px',
+                  borderRadius: 6,
+                  border: '1px solid rgba(26,28,30,0.2)',
+                  background: '#fff',
+                }}
+              >
+                <option value="concrete">Concrete</option>
+                <option value="asphalt">Asphalt</option>
+              </select>
+            </label>
             <button type="button" onClick={clearHouse} style={ghostBtn}>
               Clear house
             </button>
@@ -305,7 +394,7 @@ export default function LotStudioPage() {
         {loadError ? <span style={{ color: '#8b2e2e' }}>{loadError}</span> : status}
         {cutout.error && <div style={{ color: '#6b4e16', marginTop: 4 }}>{cutout.error}</div>}
         <div style={{ marginTop: 6, opacity: 0.65, fontSize: 11 }}>
-          Aerial · plat outline · builder plans (approx.) · custom photo optional
+          Elevation facade · driveway from street · landscaping · estimates only
         </div>
       </div>
     </div>
@@ -364,12 +453,25 @@ const planRail: CSSProperties = {
   top: 88,
   right: 16,
   width: 200,
-  maxHeight: 'calc(100vh - 200px)',
+  maxHeight: 'calc(100vh - 220px)',
   overflowY: 'auto',
   zIndex: 2,
   padding: 10,
   borderRadius: 14,
   background: 'rgba(255,255,255,0.82)',
+  backdropFilter: 'blur(10px)',
+  border: '1px solid rgba(26,28,30,0.1)',
+}
+
+const costCard: CSSProperties = {
+  position: 'absolute',
+  top: 88,
+  left: 16,
+  width: 220,
+  zIndex: 2,
+  padding: 12,
+  borderRadius: 14,
+  background: 'rgba(255,255,255,0.9)',
   backdropFilter: 'blur(10px)',
   border: '1px solid rgba(26,28,30,0.1)',
 }
@@ -393,7 +495,7 @@ const dock: CSSProperties = {
   gap: 10,
   alignItems: 'center',
   justifyContent: 'center',
-  maxWidth: 'min(920px, calc(100% - 24px))',
+  maxWidth: 'min(980px, calc(100% - 24px))',
   padding: '12px 14px',
   borderRadius: 14,
   background: 'rgba(255,255,255,0.88)',
@@ -413,6 +515,16 @@ const ghostBtn: CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
   color: '#1a1c1e',
+}
+
+const chipBtn: CSSProperties = {
+  padding: '7px 12px',
+  borderRadius: 999,
+  border: '1px solid rgba(26,28,30,0.2)',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
 }
 
 const statusBox: CSSProperties = {

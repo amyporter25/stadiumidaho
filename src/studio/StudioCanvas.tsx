@@ -1,26 +1,48 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { FT_TO_M, makeFrame, ringToLocal, type LocalFrame } from '../components/lotVisualizer/geo'
+import {
+  FT_TO_M,
+  frontEdgeMidpoint,
+  makeFrame,
+  ringToLocal,
+  type LocalFrame,
+} from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
-import { buildHouse, houseFootprint } from '../components/lotVisualizer/houses'
+import {
+  applyElevationFacade,
+  buildHouse,
+  houseFootprint,
+  planFacadeUrl,
+} from '../components/lotVisualizer/houses'
 import type { StadiumLotFeature } from '../components/LotMap'
+import {
+  estimateDriveway,
+  type DrivewayEstimate,
+  type DrivewayMaterial,
+  type PlantKind,
+} from './costs'
+import { buildPlant } from './landscape'
 import { disposeSky, makeClearSky } from './sky'
 
-export type StudioMode = 'look' | 'place'
+export type StudioMode = 'look' | 'place' | 'plant'
 
 interface StudioCanvasProps {
   lot: StadiumLotFeature
   neighbors: StadiumLotFeature[]
   mode: StudioMode
-  /** Builder plan id — preferred path for Stadium lots */
   planId: string | null
-  /** Custom photo cutout (alternate path) */
   houseImageUrl: string | null
   houseWidthFt: number
   houseYawDeg: number
+  plantKind: PlantKind
+  drivewayMaterial: DrivewayMaterial
+  landscapeRevision: number
   onStatus: (msg: string) => void
   onLoadError: (msg: string) => void
+  onDrivewayChange: (est: DrivewayEstimate | null) => void
+  onLandscapeCostChange: (usd: number, count: number) => void
+  onYawSuggest: (deg: number) => void
 }
 
 function lotCentroid(lot: StadiumLotFeature): { lat: number; lng: number } {
@@ -48,9 +70,25 @@ function disposeObject3D(obj: THREE.Object3D) {
   })
 }
 
+function makeAsphaltTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = 128
+  c.height = 128
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = '#4a4a4c'
+  ctx.fillRect(0, 0, 128, 128)
+  for (let i = 0; i < 800; i++) {
+    ctx.fillStyle = `rgba(${40 + Math.random() * 40},${40 + Math.random() * 40},${42 + Math.random() * 40},0.35)`
+    ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2)
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
 /**
- * Lot-first world: real aerial photo, plat outline, builder plan massing
- * (or optional house photo cutout) placed in feet.
+ * Lot-first world: aerial + plat + textured builder home + driveway + landscaping.
  */
 export default function StudioCanvas({
   lot,
@@ -60,15 +98,26 @@ export default function StudioCanvas({
   houseImageUrl,
   houseWidthFt,
   houseYawDeg,
+  plantKind,
+  drivewayMaterial,
+  landscapeRevision,
   onStatus,
   onLoadError,
+  onDrivewayChange,
+  onLandscapeCostChange,
+  onYawSuggest,
 }: StudioCanvasProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef(mode)
+  const plantKindRef = useRef(plantKind)
+  const materialRef = useRef(drivewayMaterial)
   const anchorRef = useRef<THREE.Group | null>(null)
   const cutoutRef = useRef<THREE.Mesh | null>(null)
   const massingRef = useRef<THREE.Group | null>(null)
   const shadowRef = useRef<THREE.Mesh | null>(null)
+  const drivewayRef = useRef<THREE.Mesh | null>(null)
+  const landscapeRef = useRef<THREE.Group | null>(null)
+  const frontMidRef = useRef<[number, number]>([0, 0])
   const groundY = 0.05
   const controlsRef = useRef<OrbitControls | null>(null)
   const widthRef = useRef(houseWidthFt)
@@ -76,8 +125,12 @@ export default function StudioCanvas({
   const texUrlRef = useRef<string | null>(null)
   const planIdRef = useRef<string | null>(null)
   const frameRef = useRef<LocalFrame | null>(null)
+  const autoYawDoneRef = useRef(false)
+  const syncDrivewayRef = useRef<() => void>(() => {})
 
   modeRef.current = mode
+  plantKindRef.current = plantKind
+  materialRef.current = drivewayMaterial
   widthRef.current = houseWidthFt
   yawRef.current = houseYawDeg
 
@@ -94,7 +147,6 @@ export default function StudioCanvas({
       cutout.scale.set(w, w / aspect, 1)
       cutout.position.y = groundY + cutout.scale.y / 2
     } else if (massing?.visible && planIdRef.current) {
-      // Massing is built at real scale; optional width slider scales uniformly
       const fp = houseFootprint(planIdRef.current)
       const targetW = widthRef.current * FT_TO_M
       const s = targetW / Math.max(0.01, fp.wM)
@@ -110,54 +162,87 @@ export default function StudioCanvas({
       const span = cutout?.visible
         ? Math.max(cutout.scale.x, cutout.scale.y) * 0.4
         : massing && planIdRef.current
-          ? (houseFootprint(planIdRef.current).wM * massing.scale.x) * 0.35
+          ? houseFootprint(planIdRef.current).wM * massing.scale.x * 0.35
           : 4
       shadow.scale.set(span, span, 1)
     }
+
+    syncDrivewayRef.current()
   }
 
   useEffect(() => {
     syncTransform()
-  }, [houseWidthFt, houseYawDeg])
+  }, [houseWidthFt, houseYawDeg, drivewayMaterial])
+
+  useEffect(() => {
+    if (landscapeRevision === 0) return
+    const root = landscapeRef.current
+    if (!root) return
+    while (root.children.length) {
+      const child = root.children[0]
+      root.remove(child)
+      disposeObject3D(child)
+    }
+    onLandscapeCostChange(0, 0)
+  }, [landscapeRevision, onLandscapeCostChange])
 
   // Builder plan massing
   useEffect(() => {
     const anchor = anchorRef.current
     if (!anchor) return
 
-    // Clear previous massing
     if (massingRef.current) {
       anchor.remove(massingRef.current)
       disposeObject3D(massingRef.current)
       massingRef.current = null
     }
     planIdRef.current = planId
+    autoYawDoneRef.current = false
 
     if (!planId) {
       if (!cutoutRef.current?.visible) {
         anchor.visible = false
         if (shadowRef.current) shadowRef.current.visible = false
+        if (drivewayRef.current) drivewayRef.current.visible = false
+        onDrivewayChange(null)
       }
       return
     }
 
-    // Prefer plan over cutout when a plan is selected
     if (cutoutRef.current) cutoutRef.current.visible = false
 
     const massing = buildHouse(planId)
     massingRef.current = massing
     anchor.add(massing)
     anchor.visible = true
-    syncTransform()
-    onStatus('Builder plan on the lot — drag to move, turn to face the street.')
-  }, [planId, onStatus])
 
-  // Photo cutout (custom upload path)
+    // Face the street on first drop
+    const [fx, fz] = frontMidRef.current
+    const yawRad = Math.atan2(
+      -(fx - anchor.position.x),
+      -(fz - anchor.position.z)
+    )
+    const yawDeg = Math.round(THREE.MathUtils.radToDeg(yawRad))
+    autoYawDoneRef.current = true
+    onYawSuggest(yawDeg)
+    yawRef.current = yawDeg
+    syncTransform()
+
+    const facade = planFacadeUrl(planId)
+    if (facade) {
+      void applyElevationFacade(massing, facade).then(() => {
+        onStatus('Builder elevation on the lot — drag to move; driveway updates with placement.')
+      })
+    } else {
+      onStatus('Builder plan on the lot — drag to move; driveway updates with placement.')
+    }
+  }, [planId, onStatus, onYawSuggest, onDrivewayChange])
+
+  // Photo cutout
   useEffect(() => {
     const mesh = cutoutRef.current
     const anchor = anchorRef.current
     if (!mesh || !anchor || !houseImageUrl) return
-    // When a plan is active, ignore cutout updates
     if (planId) return
     if (texUrlRef.current === houseImageUrl) return
     texUrlRef.current = houseImageUrl
@@ -184,7 +269,7 @@ export default function StudioCanvas({
         mesh.visible = true
         anchor.visible = true
         syncTransform()
-        onStatus('House photo on the lot — drag to move, set width in feet, turn to face the view.')
+        onStatus('House photo on the lot — drag to move; driveway follows to the street.')
       },
       undefined,
       () => onLoadError('Could not load the house photo.')
@@ -203,6 +288,8 @@ export default function StudioCanvas({
     const frame = makeFrame(center.lat, center.lng)
     frameRef.current = frame
     const lotRing = ringToLocal(lot.geometry.coordinates[0], frame)
+    const frontMid = frontEdgeMidpoint(lotRing, lot.properties.facing)
+    frontMidRef.current = frontMid
 
     let minX = Infinity,
       maxX = -Infinity,
@@ -241,7 +328,7 @@ export default function StudioCanvas({
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.toneMappingExposure = 1.08
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
     mount.appendChild(renderer.domElement)
@@ -258,13 +345,17 @@ export default function StudioCanvas({
     const sky = makeClearSky(2800)
     scene.add(sky)
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.85))
-    const sun = new THREE.DirectionalLight(0xfff4e5, 1.05)
-    sun.position.set(40, 80, 20)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75))
+    const sun = new THREE.DirectionalLight(0xfff1dd, 1.25)
+    sun.position.set(55, 90, 30)
     sun.castShadow = true
-    sun.shadow.mapSize.set(1024, 1024)
+    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.camera.left = -80
+    sun.shadow.camera.right = 80
+    sun.shadow.camera.top = 80
+    sun.shadow.camera.bottom = -80
     scene.add(sun)
-    scene.add(new THREE.HemisphereLight(0xb8d4f0, 0xc4b89a, 0.4))
+    scene.add(new THREE.HemisphereLight(0xb8d4f0, 0xc4b89a, 0.45))
 
     const [gx0, gz0] = frame.toLocal(south, west)
     const [gx1, gz1] = frame.toLocal(north, east)
@@ -300,7 +391,7 @@ export default function StudioCanvas({
       new THREE.MeshBasicMaterial({
         color: 0xf2b04a,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.14,
         depthWrite: false,
         side: THREE.DoubleSide,
       })
@@ -317,6 +408,14 @@ export default function StudioCanvas({
       )
     )
 
+    // Street-front marker (where driveway starts)
+    const curb = new THREE.Mesh(
+      new THREE.BoxGeometry(4.5, 0.18, 0.55),
+      new THREE.MeshStandardMaterial({ color: 0x6e6e70, roughness: 0.95 })
+    )
+    curb.position.set(frontMid[0], 0.1, frontMid[1])
+    scene.add(curb)
+
     for (const n of neighbors) {
       if (!n.geometry) continue
       const nRing = ringToLocal(n.geometry.coordinates[0], frame)
@@ -331,7 +430,6 @@ export default function StudioCanvas({
       )
     }
 
-    // Anchor for either builder massing or photo cutout
     const anchor = new THREE.Group()
     anchor.visible = false
     anchor.position.set(0, 0, 0)
@@ -366,16 +464,87 @@ export default function StudioCanvas({
     scene.add(shadow)
     shadowRef.current = shadow
 
-    // Re-apply active plan/cutout after scene rebuild
+    // Driveway ribbon
+    const asphaltMap = makeAsphaltTexture()
+    const drivewayMat = new THREE.MeshStandardMaterial({
+      map: asphaltMap,
+      color: 0xffffff,
+      roughness: 0.95,
+      metalness: 0.02,
+    })
+    const driveway = new THREE.Mesh(new THREE.BoxGeometry(1, 0.08, 1), drivewayMat)
+    driveway.receiveShadow = true
+    driveway.visible = false
+    scene.add(driveway)
+    drivewayRef.current = driveway
+
+    const landscapeRoot = new THREE.Group()
+    scene.add(landscapeRoot)
+    landscapeRef.current = landscapeRoot
+
+    const worldApproach = new THREE.Vector3()
+    const syncDriveway = () => {
+      if (!drivewayRef.current || !anchorRef.current?.visible) {
+        if (drivewayRef.current) drivewayRef.current.visible = false
+        onDrivewayChange(null)
+        return
+      }
+      const a = anchorRef.current
+      const approach =
+        (massingRef.current?.getObjectByName('garageApproach') as THREE.Object3D | undefined) ??
+        null
+      if (approach) {
+        approach.getWorldPosition(worldApproach)
+      } else {
+        // Photo cutout: aim at front of the house plane
+        worldApproach.set(a.position.x, 0, a.position.z)
+        const yaw = a.rotation.y
+        const depth = cutoutRef.current?.visible
+          ? (cutoutRef.current.scale.y || 4) * 0.15
+          : 4
+        worldApproach.x += Math.sin(yaw) * -depth
+        worldApproach.z += Math.cos(yaw) * -depth
+      }
+
+      const [fx, fz] = frontMidRef.current
+      const dx = worldApproach.x - fx
+      const dz = worldApproach.z - fz
+      const len = Math.hypot(dx, dz)
+      if (len < 0.5) {
+        driveway.visible = false
+        onDrivewayChange(null)
+        return
+      }
+
+      const widthM = 14 * FT_TO_M
+      driveway.visible = true
+      driveway.position.set((fx + worldApproach.x) / 2, 0.05, (fz + worldApproach.z) / 2)
+      driveway.scale.set(widthM, 1, len)
+      driveway.rotation.y = Math.atan2(dx, dz)
+      asphaltMap.repeat.set(widthM / 2, len / 2)
+      asphaltMap.needsUpdate = true
+
+      // Tint for concrete vs asphalt
+      drivewayMat.color.set(materialRef.current === 'concrete' ? 0xb0aea8 : 0xffffff)
+
+      onDrivewayChange(estimateDriveway(len, materialRef.current))
+    }
+    syncDrivewayRef.current = syncDriveway
+
     if (planId) {
       planIdRef.current = planId
       const massing = buildHouse(planId)
       massingRef.current = massing
       anchor.add(massing)
       anchor.visible = true
-      const fp = houseFootprint(planId)
-      widthRef.current = houseWidthFt || fp.wM / FT_TO_M
+      const yawRad = Math.atan2(-(frontMid[0] - 0), -(frontMid[1] - 0))
+      const yawDeg = Math.round(THREE.MathUtils.radToDeg(yawRad))
+      onYawSuggest(yawDeg)
+      yawRef.current = yawDeg
+      widthRef.current = houseWidthFt
       syncTransform()
+      const facade = planFacadeUrl(planId)
+      if (facade) void applyElevationFacade(massing, facade)
     }
 
     onStatus('Loading aerial photo of this lot…')
@@ -406,7 +575,7 @@ export default function StudioCanvas({
       groundMat.needsUpdate = true
       if (!disposed) {
         onStatus(
-          `Lot ${lot.properties.name} ready — pick a builder plan below, or upload your own house photo.`
+          `Lot ${lot.properties.name} ready — drop a builder plan; driveway + landscaping tools are below.`
         )
       }
     })
@@ -421,18 +590,63 @@ export default function StudioCanvas({
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
     }
 
-    const moveHouse = (e: PointerEvent) => {
-      if (!anchor.visible) return
+    const hitGround = (e: PointerEvent): THREE.Vector3 | null => {
       setFromEvent(e)
       raycaster.setFromCamera(pointer, camera)
       const hits = raycaster.intersectObject(rayGround, false)
-      if (!hits[0]) return
-      anchor.position.x = hits[0].point.x
-      anchor.position.z = hits[0].point.z
+      return hits[0]?.point ?? null
+    }
+
+    const tallyLandscape = () => {
+      const root = landscapeRef.current
+      if (!root) return
+      let usd = 0
+      let count = 0
+      for (const child of root.children) {
+        const kind = child.userData.plantKind as PlantKind | undefined
+        if (!kind) continue
+        count += 1
+        // costs imported lazily via userData set at plant time
+        usd += (child.userData.costUsd as number) || 0
+      }
+      onLandscapeCostChange(usd, count)
+    }
+
+    const moveHouse = (e: PointerEvent) => {
+      if (!anchor.visible) return
+      const pt = hitGround(e)
+      if (!pt) return
+      anchor.position.x = pt.x
+      anchor.position.z = pt.z
       syncTransform()
     }
 
+    const plantAt = (e: PointerEvent) => {
+      const pt = hitGround(e)
+      const root = landscapeRef.current
+      if (!pt || !root) return
+      const kind = plantKindRef.current
+      const plant = buildPlant(kind)
+      plant.position.set(pt.x, 0, pt.z)
+      plant.rotation.y = Math.random() * Math.PI * 2
+      // cost stamped for tally
+      const costs: Record<PlantKind, number> = {
+        tree: 450,
+        evergreen: 380,
+        shrub: 85,
+        lawn: 180,
+      }
+      plant.userData.costUsd = costs[kind]
+      root.add(plant)
+      tallyLandscape()
+      onStatus(`Placed ${kind} — keep clicking to plant more, or switch modes.`)
+    }
+
     const onDown = (e: PointerEvent) => {
+      if (modeRef.current === 'plant') {
+        plantAt(e)
+        return
+      }
       if (modeRef.current !== 'place' || !anchor.visible) return
       dragging = true
       controls.enabled = false
@@ -494,13 +708,22 @@ export default function StudioCanvas({
         disposeObject3D(massingRef.current)
         massingRef.current = null
       }
+      if (landscapeRef.current) {
+        disposeObject3D(landscapeRef.current)
+        landscapeRef.current = null
+      }
       houseMat.map?.dispose()
       houseMat.dispose()
       cutout.geometry.dispose()
       shadow.geometry.dispose()
       ;(shadow.material as THREE.Material).dispose()
+      driveway.geometry.dispose()
+      drivewayMat.dispose()
+      asphaltMap.dispose()
       rayGround.geometry.dispose()
       ;(rayGround.material as THREE.Material).dispose()
+      curb.geometry.dispose()
+      ;(curb.material as THREE.Material).dispose()
       renderer?.dispose()
       if (renderer?.domElement.parentElement === mount) {
         mount.removeChild(renderer.domElement)
@@ -508,10 +731,11 @@ export default function StudioCanvas({
       anchorRef.current = null
       cutoutRef.current = null
       shadowRef.current = null
+      drivewayRef.current = null
       planIdRef.current = null
       texUrlRef.current = null
+      syncDrivewayRef.current = () => {}
     }
-    // planId/houseWidthFt applied via separate effects after mount; include lot/neighbors only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lot, neighbors, onStatus, onLoadError])
 
