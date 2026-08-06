@@ -315,39 +315,52 @@ export function buildWhitestoneHouse(): THREE.Group {
     house.add(arm)
   }
 
-  // --- Rear elevation: large glazed gable ---
-  const rearZ = D * 0.44
-  const rearGableW = (livingW + entryW) * 0.55
-  const rearGable = gableAlongZ(rearGableW, D * 0.22, wallH * 1.05, roofRise * 0.85, siding, roof, 0.25)
-  rearGable.position.set(entryX + entryW * 0.15, 0, rearZ)
+  // --- Rear elevation: large glazed gable (reads from orbit) ---
+  const rearZ = D * 0.42
+  const rearCenterX = entryX + entryW * 0.1
+  const rearGableW = (livingW + entryW) * 0.62
+  const rearGable = gableAlongZ(
+    rearGableW,
+    D * 0.28,
+    wallH * 1.08,
+    roofRise * 0.95,
+    siding,
+    roof,
+    0.28
+  )
+  rearGable.position.set(rearCenterX, 0, rearZ)
   house.add(rearGable)
 
-  // Window wall (grid)
-  const wallGlassW = rearGableW * 0.72
-  const wallGlassH = wallH * 0.85
+  // Window wall (grid) — pushed to the rear face so it reads clearly
+  const wallGlassW = rearGableW * 0.78
+  const wallGlassH = wallH * 0.95
+  const rearFaceZ = rearZ + D * 0.14
   const cols = 3
   const rows = 2
   const cellW = wallGlassW / cols
   const cellH = wallGlassH / rows
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const gx = entryX + entryW * 0.15 + (c - 1) * cellW
-      const gy = 0.45 + cellH / 2 + r * cellH
-      const pane = new THREE.Mesh(new THREE.BoxGeometry(cellW * 0.88, cellH * 0.88, 0.06), glass)
-      pane.position.set(gx, gy, rearZ + D * 0.11 + 0.05)
-      house.add(pane)
+      const gx = rearCenterX + (c - 1) * cellW
+      const gy = 0.4 + cellH / 2 + r * cellH
       const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(cellW * 0.95, cellH * 0.95, 0.05),
+        new THREE.BoxGeometry(cellW * 0.96, cellH * 0.96, 0.08),
         trim
       )
-      frame.position.set(gx, gy, rearZ + D * 0.11)
+      frame.position.set(gx, gy, rearFaceZ)
       house.add(frame)
+      const pane = new THREE.Mesh(new THREE.BoxGeometry(cellW * 0.86, cellH * 0.86, 0.06), glass)
+      pane.position.set(gx, gy, rearFaceZ + 0.06)
+      house.add(pane)
     }
   }
   // Triangular gable glass
-  const peakGlass = new THREE.Mesh(new THREE.BoxGeometry(wallGlassW * 0.5, 1.4, 0.06), glass)
-  peakGlass.position.set(entryX + entryW * 0.15, wallH + 0.9, rearZ + D * 0.11 + 0.05)
+  const peakGlass = new THREE.Mesh(new THREE.BoxGeometry(wallGlassW * 0.55, 1.7, 0.08), glass)
+  peakGlass.position.set(rearCenterX, wallH + 1.05, rearFaceZ + 0.06)
   house.add(peakGlass)
+  const peakFrame = new THREE.Mesh(new THREE.BoxGeometry(wallGlassW * 0.62, 1.85, 0.06), trim)
+  peakFrame.position.set(rearCenterX, wallH + 1.05, rearFaceZ)
+  house.add(peakFrame)
 
   // Rear side windows
   addWindow(

@@ -375,23 +375,18 @@ export default function StudioCanvas({
       return
     }
 
-    // On first drop (or if the home is absurdly far from the curb), seat it near
-    // the street so the driveway is a realistic curb→garage run.
+    // Seat near the street on every plan drop so driveway length stays realistic
+    // when switching plans (don't inherit a far-dragged prior placement).
     const [fx, fz] = frontMidRef.current
-    const distToCurb = Math.hypot(anchor.position.x - fx, anchor.position.z - fz)
-    const needsSeat =
-      !houseIsLive() || distToCurb > 140 * FT_TO_M || distToCurb < 20 * FT_TO_M
-    if (needsSeat) {
-      const inwardX = 0 - fx
-      const inwardZ = 0 - fz
-      const inwardLen = Math.hypot(inwardX, inwardZ) || 1
-      const setbackM = 58 * FT_TO_M
-      anchor.position.set(
-        fx + (inwardX / inwardLen) * setbackM,
-        0,
-        fz + (inwardZ / inwardLen) * setbackM
-      )
-    }
+    const inwardX = 0 - fx
+    const inwardZ = 0 - fz
+    const inwardLen = Math.hypot(inwardX, inwardZ) || 1
+    const setbackM = 58 * FT_TO_M
+    anchor.position.set(
+      fx + (inwardX / inwardLen) * setbackM,
+      0,
+      fz + (inwardZ / inwardLen) * setbackM
+    )
 
     // Face the street on drop
     const yawRad = Math.atan2(
