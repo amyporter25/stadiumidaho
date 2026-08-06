@@ -5,10 +5,13 @@ export interface HomePlan {
   name: string
   subtitle: string
   builder: string
-  /** Front elevation crop for picker / marketing cards */
+  /** Photoreal marketing elevation (picker cards + reference) */
   elevationImg: string
-  /** Transparent elevation drape used on the 3D facade */
-  facadeImg: string
+  /**
+   * Transparent photoreal cutout placed on the lot in Studio.
+   * This is the buyer-facing house visual — not a procedural box massing.
+   */
+  cutoutImg: string
   floorplanImg: string
   /** Full construction PDF (builder-supplied) */
   pdfUrl: string
@@ -35,8 +38,8 @@ export const homePlans: HomePlan[] = [
     name: 'The Brownstone',
     subtitle: 'Front-facing garage + RV bay',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/thumbs/brownstone.jpg',
-    facadeImg: '/plans/facades/brownstone.jpg',
+    elevationImg: '/plans/brownstone-elevation.jpg',
+    cutoutImg: '/plans/cutouts/brownstone.png',
     floorplanImg: '/plans/thumbs/brownstone-floorplan.jpg',
     pdfUrl: '/plans/brownstone-15-2-rwr.pdf',
     livingArea: '~2,880 sq ft living',
@@ -60,8 +63,8 @@ export const homePlans: HomePlan[] = [
     name: 'The Whitestone',
     subtitle: 'Front-facing garage',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/thumbs/whitestone-front.jpg',
-    facadeImg: '/plans/facades/whitestone-front.jpg',
+    elevationImg: '/plans/whitestone-elevation.jpg',
+    cutoutImg: '/plans/cutouts/whitestone.png',
     floorplanImg: '/plans/thumbs/whitestone-front-floorplan.jpg',
     pdfUrl: '/plans/whitestone-7-2-rwr.pdf',
     livingArea: '~2,140 sq ft living',
@@ -84,8 +87,10 @@ export const homePlans: HomePlan[] = [
     name: 'The Whitestone',
     subtitle: 'Side-entry garage',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/thumbs/whitestone-side.jpg',
-    facadeImg: '/plans/facades/whitestone-side.jpg',
+    // Side-entry plan uses the same Whitestone marketing render until a
+    // dedicated side-entry exterior photo is supplied.
+    elevationImg: '/plans/whitestone-elevation.jpg',
+    cutoutImg: '/plans/cutouts/whitestone.png',
     floorplanImg: '/plans/thumbs/whitestone-side-floorplan.jpg',
     pdfUrl: '/plans/whitestone-29-3-pse.pdf',
     livingArea: '~2,140 sq ft living',

@@ -9,13 +9,8 @@ import {
   type LocalFrame,
 } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
-import {
-  applyElevationFacade,
-  buildHouse,
-  houseFootprint,
-  planFacadeUrl,
-} from '../components/lotVisualizer/houses'
 import type { StadiumLotFeature } from '../components/LotMap'
+import { getPlan } from '../data/plans'
 import {
   estimateDriveway,
   type DrivewayEstimate,
@@ -113,7 +108,7 @@ export default function StudioCanvas({
   const materialRef = useRef(drivewayMaterial)
   const anchorRef = useRef<THREE.Group | null>(null)
   const cutoutRef = useRef<THREE.Mesh | null>(null)
-  const massingRef = useRef<THREE.Group | null>(null)
+  const approachRef = useRef<THREE.Object3D | null>(null)
   const shadowRef = useRef<THREE.Mesh | null>(null)
   const drivewayRef = useRef<THREE.Mesh | null>(null)
   const landscapeRef = useRef<THREE.Group | null>(null)
@@ -125,7 +120,6 @@ export default function StudioCanvas({
   const texUrlRef = useRef<string | null>(null)
   const planIdRef = useRef<string | null>(null)
   const frameRef = useRef<LocalFrame | null>(null)
-  const autoYawDoneRef = useRef(false)
   const syncDrivewayRef = useRef<() => void>(() => {})
 
   modeRef.current = mode
@@ -140,34 +134,69 @@ export default function StudioCanvas({
     anchor.rotation.y = THREE.MathUtils.degToRad(yawRef.current)
 
     const cutout = cutoutRef.current
-    const massing = massingRef.current
     if (cutout?.visible) {
       const w = widthRef.current * FT_TO_M
       const aspect = (cutout.userData.aspect as number) || 1.6
       cutout.scale.set(w, w / aspect, 1)
       cutout.position.y = groundY + cutout.scale.y / 2
-    } else if (massing?.visible && planIdRef.current) {
-      const fp = houseFootprint(planIdRef.current)
-      const targetW = widthRef.current * FT_TO_M
-      const s = targetW / Math.max(0.01, fp.wM)
-      massing.scale.setScalar(s)
-      massing.position.y = 0
+
+      // Garage apron target for the driveway (marketing renders put garage on the right;
+      // side-entry plans aim toward the left wing).
+      const approach = approachRef.current
+      if (approach) {
+        const plan = planIdRef.current ? getPlan(planIdRef.current) : null
+        const side = plan?.garageEntry === 'side' ? -1 : 1
+        approach.position.set(side * w * 0.32, 0, -Math.max(1.2, cutout.scale.y * 0.08))
+      }
     }
 
     const shadow = shadowRef.current
-    if (shadow) {
+    if (shadow && cutout?.visible) {
       shadow.visible = true
       shadow.position.x = anchor.position.x
       shadow.position.z = anchor.position.z
-      const span = cutout?.visible
-        ? Math.max(cutout.scale.x, cutout.scale.y) * 0.4
-        : massing && planIdRef.current
-          ? houseFootprint(planIdRef.current).wM * massing.scale.x * 0.35
-          : 4
+      const span = Math.max(cutout.scale.x, cutout.scale.y) * 0.38
       shadow.scale.set(span, span, 1)
     }
 
     syncDrivewayRef.current()
+  }
+
+  const loadCutoutTexture = (url: string, statusMsg: string) => {
+    const mesh = cutoutRef.current
+    const anchor = anchorRef.current
+    if (!mesh || !anchor) return
+    if (texUrlRef.current === url) {
+      mesh.visible = true
+      anchor.visible = true
+      syncTransform()
+      return
+    }
+    texUrlRef.current = url
+
+    new THREE.TextureLoader().load(
+      url,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace
+        tex.anisotropy = 8
+        const img = tex.image as HTMLImageElement
+        const aspect = img.width / Math.max(1, img.height)
+        mesh.userData.aspect = aspect
+        const mat = mesh.material as THREE.MeshBasicMaterial
+        mat.map?.dispose()
+        mat.map = tex
+        mat.transparent = true
+        mat.alphaTest = 0.08
+        mat.depthWrite = false
+        mat.needsUpdate = true
+        mesh.visible = true
+        anchor.visible = true
+        syncTransform()
+        onStatus(statusMsg)
+      },
+      undefined,
+      () => onLoadError('Could not load the house image.')
+    )
   }
 
   useEffect(() => {
@@ -186,21 +215,16 @@ export default function StudioCanvas({
     onLandscapeCostChange(0, 0)
   }, [landscapeRevision, onLandscapeCostChange])
 
-  // Builder plan massing
+  // Builder plan → photoreal marketing cutout (not procedural boxes / PDF line art)
   useEffect(() => {
     const anchor = anchorRef.current
     if (!anchor) return
 
-    if (massingRef.current) {
-      anchor.remove(massingRef.current)
-      disposeObject3D(massingRef.current)
-      massingRef.current = null
-    }
     planIdRef.current = planId
-    autoYawDoneRef.current = false
 
     if (!planId) {
-      if (!cutoutRef.current?.visible) {
+      if (!houseImageUrl) {
+        if (cutoutRef.current) cutoutRef.current.visible = false
         anchor.visible = false
         if (shadowRef.current) shadowRef.current.visible = false
         if (drivewayRef.current) drivewayRef.current.visible = false
@@ -209,70 +233,38 @@ export default function StudioCanvas({
       return
     }
 
-    if (cutoutRef.current) cutoutRef.current.visible = false
+    const plan = getPlan(planId)
+    if (!plan?.cutoutImg) {
+      onLoadError('This plan is missing a house image.')
+      return
+    }
 
-    const massing = buildHouse(planId)
-    massingRef.current = massing
-    anchor.add(massing)
-    anchor.visible = true
-
-    // Face the street on first drop
+    // Face the street on drop
     const [fx, fz] = frontMidRef.current
     const yawRad = Math.atan2(
       -(fx - anchor.position.x),
       -(fz - anchor.position.z)
     )
     const yawDeg = Math.round(THREE.MathUtils.radToDeg(yawRad))
-    autoYawDoneRef.current = true
     onYawSuggest(yawDeg)
     yawRef.current = yawDeg
-    syncTransform()
 
-    const facade = planFacadeUrl(planId)
-    if (facade) {
-      void applyElevationFacade(massing, facade).then(() => {
-        onStatus('Builder elevation on the lot — drag to move; driveway updates with placement.')
-      })
-    } else {
-      onStatus('Builder plan on the lot — drag to move; driveway updates with placement.')
-    }
-  }, [planId, onStatus, onYawSuggest, onDrivewayChange])
+    loadCutoutTexture(
+      plan.cutoutImg,
+      `${plan.name} on the lot — drag to move; driveway updates with placement.`
+    )
+  }, [planId, houseImageUrl, onStatus, onYawSuggest, onDrivewayChange, onLoadError])
 
-  // Photo cutout
+  // Custom uploaded photo cutout
   useEffect(() => {
-    const mesh = cutoutRef.current
     const anchor = anchorRef.current
-    if (!mesh || !anchor || !houseImageUrl) return
+    if (!anchor || !houseImageUrl) return
     if (planId) return
-    if (texUrlRef.current === houseImageUrl) return
-    texUrlRef.current = houseImageUrl
 
-    if (massingRef.current) {
-      anchor.remove(massingRef.current)
-      disposeObject3D(massingRef.current)
-      massingRef.current = null
-      planIdRef.current = null
-    }
-
-    new THREE.TextureLoader().load(
+    planIdRef.current = null
+    loadCutoutTexture(
       houseImageUrl,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace
-        const img = tex.image as HTMLImageElement
-        const aspect = img.width / Math.max(1, img.height)
-        mesh.userData.aspect = aspect
-        const mat = mesh.material as THREE.MeshBasicMaterial
-        mat.map?.dispose()
-        mat.map = tex
-        mat.transparent = true
-        mat.needsUpdate = true
-        mesh.visible = true
-        anchor.visible = true
-        syncTransform()
-        onStatus('House photo on the lot — drag to move; driveway follows to the street.')
-      },
-      undefined,
-      () => onLoadError('Could not load the house photo.')
+      'House photo on the lot — drag to move; driveway follows to the street.'
     )
   }, [houseImageUrl, planId, onStatus, onLoadError])
 
@@ -445,9 +437,17 @@ export default function StudioCanvas({
     const cutout = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), houseMat)
     cutout.visible = false
     cutout.position.set(0, 1, 0)
+    // Face the street (−z): PlaneGeometry faces +z by default
+    cutout.rotation.y = Math.PI
     anchor.add(cutout)
     cutoutRef.current = cutout
     texUrlRef.current = null
+
+    const approach = new THREE.Object3D()
+    approach.name = 'garageApproach'
+    approach.position.set(0, 0, -1.2)
+    anchor.add(approach)
+    approachRef.current = approach
 
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.5, 40),
@@ -484,26 +484,16 @@ export default function StudioCanvas({
 
     const worldApproach = new THREE.Vector3()
     const syncDriveway = () => {
-      if (!drivewayRef.current || !anchorRef.current?.visible) {
+      if (!drivewayRef.current || !anchorRef.current?.visible || !cutoutRef.current?.visible) {
         if (drivewayRef.current) drivewayRef.current.visible = false
         onDrivewayChange(null)
         return
       }
-      const a = anchorRef.current
-      const approach =
-        (massingRef.current?.getObjectByName('garageApproach') as THREE.Object3D | undefined) ??
-        null
+      const approach = approachRef.current
       if (approach) {
         approach.getWorldPosition(worldApproach)
       } else {
-        // Photo cutout: aim at front of the house plane
-        worldApproach.set(a.position.x, 0, a.position.z)
-        const yaw = a.rotation.y
-        const depth = cutoutRef.current?.visible
-          ? (cutoutRef.current.scale.y || 4) * 0.15
-          : 4
-        worldApproach.x += Math.sin(yaw) * -depth
-        worldApproach.z += Math.cos(yaw) * -depth
+        worldApproach.set(anchor.position.x, 0, anchor.position.z)
       }
 
       const [fx, fz] = frontMidRef.current
@@ -524,7 +514,6 @@ export default function StudioCanvas({
       asphaltMap.repeat.set(widthM / 2, len / 2)
       asphaltMap.needsUpdate = true
 
-      // Tint for concrete vs asphalt
       drivewayMat.color.set(materialRef.current === 'concrete' ? 0xb0aea8 : 0xffffff)
 
       onDrivewayChange(estimateDriveway(len, materialRef.current))
@@ -533,18 +522,18 @@ export default function StudioCanvas({
 
     if (planId) {
       planIdRef.current = planId
-      const massing = buildHouse(planId)
-      massingRef.current = massing
-      anchor.add(massing)
-      anchor.visible = true
+      const plan = getPlan(planId)
       const yawRad = Math.atan2(-(frontMid[0] - 0), -(frontMid[1] - 0))
       const yawDeg = Math.round(THREE.MathUtils.radToDeg(yawRad))
       onYawSuggest(yawDeg)
       yawRef.current = yawDeg
       widthRef.current = houseWidthFt
-      syncTransform()
-      const facade = planFacadeUrl(planId)
-      if (facade) void applyElevationFacade(massing, facade)
+      if (plan?.cutoutImg) {
+        loadCutoutTexture(
+          plan.cutoutImg,
+          `${plan.name} on the lot — drag to move; driveway updates with placement.`
+        )
+      }
     }
 
     onStatus('Loading aerial photo of this lot…')
@@ -704,10 +693,6 @@ export default function StudioCanvas({
       groundMat.dispose()
       fillGeo.dispose()
       ;(fill.material as THREE.Material).dispose()
-      if (massingRef.current) {
-        disposeObject3D(massingRef.current)
-        massingRef.current = null
-      }
       if (landscapeRef.current) {
         disposeObject3D(landscapeRef.current)
         landscapeRef.current = null
@@ -730,6 +715,7 @@ export default function StudioCanvas({
       }
       anchorRef.current = null
       cutoutRef.current = null
+      approachRef.current = null
       shadowRef.current = null
       drivewayRef.current = null
       planIdRef.current = null

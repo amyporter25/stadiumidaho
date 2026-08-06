@@ -431,32 +431,7 @@ export function buildHouse(planId: string): THREE.Group {
     house.add(win)
   }
 
-  // Facade billboard — builder elevation drawing, slightly in front of the massing
-  const facadeH = Math.max(spec.wallM, spec.garageHeightM) * 1.05 + spec.roofRiseM * 0.55
-  // PlaneGeometry faces +z by default; rotate so the textured face points
-  // toward the street (−z), where buyers look at the elevation.
-  const facade = new THREE.Mesh(
-    new THREE.PlaneGeometry(W * 0.98, facadeH),
-    new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.72,
-      metalness: 0.02,
-      transparent: true,
-      opacity: 0,
-      depthWrite: true,
-      side: THREE.DoubleSide,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
-    })
-  )
-  facade.name = 'elevationFacade'
-  facade.rotation.y = Math.PI
-  facade.position.set(0, facadeH * 0.48, -D * 0.5 - 0.15)
-  facade.visible = false
-  house.add(facade)
-
-  // Driveway apron attach point (local space) — used by Studio driveway sim
+  // Driveway apron attach point (local space)
   const approach = new THREE.Object3D()
   approach.name = 'garageApproach'
   if (spec.garageEntry === 'side') {
@@ -475,49 +450,8 @@ export function buildHouse(planId: string): THREE.Group {
       o.receiveShadow = true
     }
   })
-  facade.castShadow = false
 
   return house
-}
-
-/** Drape the builder elevation PNG onto the front facade plane. */
-export function applyElevationFacade(
-  house: THREE.Group,
-  facadeUrl: string
-): Promise<void> {
-  const facade = house.getObjectByName('elevationFacade') as THREE.Mesh | undefined
-  if (!facade) return Promise.resolve()
-
-  return new Promise((resolve) => {
-    new THREE.TextureLoader().load(
-      facadeUrl,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = 8
-        const mat = facade.material as THREE.MeshStandardMaterial
-        mat.map?.dispose()
-        mat.map = tex
-        mat.opacity = 1
-        mat.transparent = true
-        mat.needsUpdate = true
-        facade.visible = true
-        // Match plane aspect to image so the elevation isn't stretched
-        const img = tex.image as HTMLImageElement
-        const aspect = img.width / Math.max(1, img.height)
-        const h = (facade.geometry as THREE.PlaneGeometry).parameters.height
-        const w = h * aspect
-        const maxW = (house.userData.widthM as number) * 1.02
-        const finalW = Math.min(w, maxW)
-        const finalH = finalW / aspect
-        facade.geometry.dispose()
-        facade.geometry = new THREE.PlaneGeometry(finalW, finalH)
-        facade.position.y = finalH * 0.48
-        resolve()
-      },
-      undefined,
-      () => resolve()
-    )
-  })
 }
 
 export function houseFootprint(planId: string): { wM: number; dM: number } {
@@ -525,8 +459,8 @@ export function houseFootprint(planId: string): { wM: number; dM: number } {
   return { wM: spec.widthFt * FT_TO_M, dM: spec.depthFt * FT_TO_M }
 }
 
-/** Facade image URL for a plan (PNG with paper knocked out when available). */
-export function planFacadeUrl(planId: string): string | null {
+/** Photoreal cutout URL for Studio placement. */
+export function planCutoutUrl(planId: string): string | null {
   const plan = getPlan(planId)
-  return plan?.facadeImg ?? plan?.elevationImg ?? null
+  return plan?.cutoutImg ?? null
 }
