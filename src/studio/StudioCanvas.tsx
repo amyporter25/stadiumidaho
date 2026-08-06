@@ -196,10 +196,12 @@ export default function StudioCanvas({
 
     const shadow = shadowRef.current
     if (shadow && cutout?.visible) {
+      // Keep the contact shadow very soft — a dark disc was reading as a gap
+      // between pave and the garage doors.
       shadow.visible = true
       shadow.position.x = anchor.position.x
       shadow.position.z = anchor.position.z
-      const span = Math.max(cutout.scale.x, cutout.scale.y) * 0.38
+      const span = Math.max(cutout.scale.x, cutout.scale.y) * 0.28
       shadow.scale.set(span, span, 1)
     }
 
@@ -292,8 +294,25 @@ export default function StudioCanvas({
       return
     }
 
-    // Face the street on drop
+    // On first drop (or if the home is absurdly far from the curb), seat it near
+    // the street so the driveway is a realistic curb→garage run.
     const [fx, fz] = frontMidRef.current
+    const distToCurb = Math.hypot(anchor.position.x - fx, anchor.position.z - fz)
+    const needsSeat =
+      !cutoutRef.current?.visible || distToCurb > 140 * FT_TO_M || distToCurb < 20 * FT_TO_M
+    if (needsSeat) {
+      const inwardX = 0 - fx
+      const inwardZ = 0 - fz
+      const inwardLen = Math.hypot(inwardX, inwardZ) || 1
+      const setbackM = 58 * FT_TO_M
+      anchor.position.set(
+        fx + (inwardX / inwardLen) * setbackM,
+        0,
+        fz + (inwardZ / inwardLen) * setbackM
+      )
+    }
+
+    // Face the street on drop
     const yawRad = Math.atan2(
       -(fx - anchor.position.x),
       -(fz - anchor.position.z)
@@ -543,22 +562,22 @@ export default function StudioCanvas({
       new THREE.MeshBasicMaterial({
         color: 0x000000,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.1,
         depthWrite: false,
       })
     )
     shadow.rotation.x = -Math.PI / 2
-    shadow.position.y = 0.03
+    shadow.position.y = 0.02
     shadow.visible = false
     scene.add(shadow)
     shadowRef.current = shadow
 
-    // Driveway ribbon
+    // Driveway ribbon — map is only for asphalt; concrete stays a clean light slab
+    // so the path doesn't read as a black void next to the apron.
     const asphaltMap = makeAsphaltTexture()
     const drivewayMat = new THREE.MeshStandardMaterial({
-      map: asphaltMap,
-      color: 0xffffff,
-      roughness: 0.95,
+      color: 0xc4c2ba,
+      roughness: 0.92,
       metalness: 0.02,
     })
     const driveway = new THREE.Mesh(new THREE.BoxGeometry(1, 0.08, 1), drivewayMat)
@@ -601,21 +620,21 @@ export default function StudioCanvas({
 
       // Overshoot past the facade into the house mass so pave reads as going
       // all the way under the garage door (billboard has no depth).
-      const tipX = worldDoor.x + ux * 6.0
-      const tipZ = worldDoor.z + uz * 6.0
+      const tipX = worldDoor.x + ux * 8.0
+      const tipZ = worldDoor.z + uz * 8.0
       dx = tipX - fx
       dz = tipZ - fz
       len = Math.hypot(dx, dz)
 
-      const widthM = 18 * FT_TO_M
+      const widthM = 20 * FT_TO_M
       const isConcrete = materialRef.current === 'concrete'
-      const pave = isConcrete ? 0xc4c2ba : 0x555558
+      const pave = isConcrete ? 0xc8c6be : 0x4e4e52
 
       // Match curb to the active pave so the street start doesn't look detached
       const curbMesh = scene.getObjectByName('streetCurb') as THREE.Mesh | undefined
       if (curbMesh) {
         const cm = curbMesh.material as THREE.MeshStandardMaterial
-        cm.color.set(isConcrete ? 0xb0aea6 : 0x4a4a4e)
+        cm.color.set(isConcrete ? 0xb8b6ae : 0x3f3f43)
       }
 
       // Continuous ribbon: curb → under garage door
@@ -624,27 +643,37 @@ export default function StudioCanvas({
       driveway.scale.set(widthM, 1, len)
       driveway.rotation.y = Math.atan2(dx, dz)
       driveway.renderOrder = 2
-      asphaltMap.repeat.set(widthM / 2, Math.max(1, len / 2))
-      asphaltMap.needsUpdate = true
-      drivewayMat.color.set(pave)
+      if (isConcrete) {
+        drivewayMat.map = null
+        drivewayMat.color.set(pave)
+      } else {
+        asphaltMap.repeat.set(widthM / 2, Math.max(1, len / 2))
+        asphaltMap.needsUpdate = true
+        drivewayMat.map = asphaltMap
+        drivewayMat.color.set(0xffffff)
+      }
+      drivewayMat.needsUpdate = true
       drivewayMat.depthWrite = true
 
-      // Wide garage apron overlapping the last stretch — same pave, no seam
+      // Wide garage apron — same color/height family as the ribbon so it reads
+      // as one continuous pad from approach through the garage threshold.
       if (apronRef.current) {
         const apronMesh = apronRef.current
         const am = apronMesh.material as THREE.MeshStandardMaterial
         am.color.set(pave)
         am.depthWrite = true
-        const apronLen = Math.min(Math.max(14, len * 0.32), 24)
+        am.map = null
+        am.needsUpdate = true
+        const apronLen = Math.min(Math.max(16, len * 0.45), 28)
         worldApronOuter.set(tipX - ux * apronLen, 0, tipZ - uz * apronLen)
         apronMesh.visible = true
         apronMesh.renderOrder = 3
         apronMesh.position.set(
           (worldApronOuter.x + tipX) / 2,
-          0.11,
+          0.105,
           (worldApronOuter.z + tipZ) / 2
         )
-        apronMesh.scale.set(widthM * 2.05, 1.15, apronLen)
+        apronMesh.scale.set(widthM * 2.2, 1.2, apronLen)
         apronMesh.rotation.set(0, Math.atan2(dx, dz), 0)
       }
 
