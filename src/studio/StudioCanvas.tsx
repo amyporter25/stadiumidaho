@@ -491,8 +491,8 @@ export default function StudioCanvas({
     cutoutRef.current = cutout
     texUrlRef.current = null
 
-    // Soft footprint pad under the cutout — readable from aerial before you orbit
-    const pad = new THREE.Mesh(
+    // Soft footprint under the cutout — readable from aerial before you orbit
+    const footPad = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
         color: 0x1a1c1e,
@@ -501,11 +501,11 @@ export default function StudioCanvas({
         depthWrite: false,
       })
     )
-    pad.rotation.x = -Math.PI / 2
-    pad.position.y = 0.06
-    pad.visible = false
-    pad.name = 'footprintPad'
-    anchor.add(pad)
+    footPad.rotation.x = -Math.PI / 2
+    footPad.position.y = 0.06
+    footPad.visible = false
+    footPad.name = 'footprintPad'
+    anchor.add(footPad)
 
     const approach = new THREE.Object3D()
     approach.name = 'garageApproach'
