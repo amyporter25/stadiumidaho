@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { FT_TO_M, makeFrame, ringToLocal, type LocalFrame } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
+import { buildHouse, houseFootprint } from '../components/lotVisualizer/houses'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { disposeSky, makeClearSky } from './sky'
 
@@ -12,6 +13,9 @@ interface StudioCanvasProps {
   lot: StadiumLotFeature
   neighbors: StadiumLotFeature[]
   mode: StudioMode
+  /** Builder plan id — preferred path for Stadium lots */
+  planId: string | null
+  /** Custom photo cutout (alternate path) */
   houseImageUrl: string | null
   houseWidthFt: number
   houseYawDeg: number
@@ -32,14 +36,27 @@ function lotCentroid(lot: StadiumLotFeature): { lat: number; lng: number } {
   return { lat: lat / ring.length, lng: lng / ring.length }
 }
 
+function disposeObject3D(obj: THREE.Object3D) {
+  obj.traverse((child) => {
+    const mesh = child as THREE.Mesh
+    if (mesh.isMesh) {
+      mesh.geometry?.dispose()
+      const mat = mesh.material
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else mat?.dispose()
+    }
+  })
+}
+
 /**
- * Lot-first world: real aerial photo, plat outline, house photo cutout in feet.
- * This is the Track B primary experience — not the Polycam splat blob.
+ * Lot-first world: real aerial photo, plat outline, builder plan massing
+ * (or optional house photo cutout) placed in feet.
  */
 export default function StudioCanvas({
   lot,
   neighbors,
   mode,
+  planId,
   houseImageUrl,
   houseWidthFt,
   houseYawDeg,
@@ -48,34 +65,109 @@ export default function StudioCanvas({
 }: StudioCanvasProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef(mode)
-  const houseRef = useRef<THREE.Mesh | null>(null)
+  const anchorRef = useRef<THREE.Group | null>(null)
+  const cutoutRef = useRef<THREE.Mesh | null>(null)
+  const massingRef = useRef<THREE.Group | null>(null)
+  const shadowRef = useRef<THREE.Mesh | null>(null)
   const groundY = 0.05
   const controlsRef = useRef<OrbitControls | null>(null)
   const widthRef = useRef(houseWidthFt)
   const yawRef = useRef(houseYawDeg)
   const texUrlRef = useRef<string | null>(null)
+  const planIdRef = useRef<string | null>(null)
   const frameRef = useRef<LocalFrame | null>(null)
-  const lotRingRef = useRef<[number, number][]>([])
 
   modeRef.current = mode
   widthRef.current = houseWidthFt
   yawRef.current = houseYawDeg
 
-  useEffect(() => {
-    const mesh = houseRef.current
-    if (!mesh) return
-    const w = houseWidthFt * FT_TO_M
-    const aspect = (mesh.userData.aspect as number) || 1.6
-    mesh.scale.set(w, w / aspect, 1)
-    mesh.rotation.y = THREE.MathUtils.degToRad(houseYawDeg)
-    mesh.position.y = groundY + mesh.scale.y / 2
-  }, [houseWidthFt, houseYawDeg])
+  const syncTransform = () => {
+    const anchor = anchorRef.current
+    if (!anchor || !anchor.visible) return
+    anchor.rotation.y = THREE.MathUtils.degToRad(yawRef.current)
+
+    const cutout = cutoutRef.current
+    const massing = massingRef.current
+    if (cutout?.visible) {
+      const w = widthRef.current * FT_TO_M
+      const aspect = (cutout.userData.aspect as number) || 1.6
+      cutout.scale.set(w, w / aspect, 1)
+      cutout.position.y = groundY + cutout.scale.y / 2
+    } else if (massing?.visible && planIdRef.current) {
+      // Massing is built at real scale; optional width slider scales uniformly
+      const fp = houseFootprint(planIdRef.current)
+      const targetW = widthRef.current * FT_TO_M
+      const s = targetW / Math.max(0.01, fp.wM)
+      massing.scale.setScalar(s)
+      massing.position.y = 0
+    }
+
+    const shadow = shadowRef.current
+    if (shadow) {
+      shadow.visible = true
+      shadow.position.x = anchor.position.x
+      shadow.position.z = anchor.position.z
+      const span = cutout?.visible
+        ? Math.max(cutout.scale.x, cutout.scale.y) * 0.4
+        : massing && planIdRef.current
+          ? (houseFootprint(planIdRef.current).wM * massing.scale.x) * 0.35
+          : 4
+      shadow.scale.set(span, span, 1)
+    }
+  }
 
   useEffect(() => {
-    const mesh = houseRef.current
-    if (!mesh || !houseImageUrl) return
+    syncTransform()
+  }, [houseWidthFt, houseYawDeg])
+
+  // Builder plan massing
+  useEffect(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+
+    // Clear previous massing
+    if (massingRef.current) {
+      anchor.remove(massingRef.current)
+      disposeObject3D(massingRef.current)
+      massingRef.current = null
+    }
+    planIdRef.current = planId
+
+    if (!planId) {
+      if (!cutoutRef.current?.visible) {
+        anchor.visible = false
+        if (shadowRef.current) shadowRef.current.visible = false
+      }
+      return
+    }
+
+    // Prefer plan over cutout when a plan is selected
+    if (cutoutRef.current) cutoutRef.current.visible = false
+
+    const massing = buildHouse(planId)
+    massingRef.current = massing
+    anchor.add(massing)
+    anchor.visible = true
+    syncTransform()
+    onStatus('Builder plan on the lot — drag to move, turn to face the street.')
+  }, [planId, onStatus])
+
+  // Photo cutout (custom upload path)
+  useEffect(() => {
+    const mesh = cutoutRef.current
+    const anchor = anchorRef.current
+    if (!mesh || !anchor || !houseImageUrl) return
+    // When a plan is active, ignore cutout updates
+    if (planId) return
     if (texUrlRef.current === houseImageUrl) return
     texUrlRef.current = houseImageUrl
+
+    if (massingRef.current) {
+      anchor.remove(massingRef.current)
+      disposeObject3D(massingRef.current)
+      massingRef.current = null
+      planIdRef.current = null
+    }
 
     new THREE.TextureLoader().load(
       houseImageUrl,
@@ -90,15 +182,14 @@ export default function StudioCanvas({
         mat.transparent = true
         mat.needsUpdate = true
         mesh.visible = true
-        const w = widthRef.current * FT_TO_M
-        mesh.scale.set(w, w / aspect, 1)
-        mesh.position.y = groundY + mesh.scale.y / 2
-        onStatus('House on the lot — drag to move, set width in feet, turn to face the view.')
+        anchor.visible = true
+        syncTransform()
+        onStatus('House photo on the lot — drag to move, set width in feet, turn to face the view.')
       },
       undefined,
       () => onLoadError('Could not load the house photo.')
     )
-  }, [houseImageUrl, onStatus, onLoadError])
+  }, [houseImageUrl, planId, onStatus, onLoadError])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -112,7 +203,6 @@ export default function StudioCanvas({
     const frame = makeFrame(center.lat, center.lng)
     frameRef.current = frame
     const lotRing = ringToLocal(lot.geometry.coordinates[0], frame)
-    lotRingRef.current = lotRing
 
     let minX = Infinity,
       maxX = -Infinity,
@@ -141,7 +231,6 @@ export default function StudioCanvas({
       4000
     )
     const span = Math.max(maxX - minX, maxZ - minZ, 40)
-    // Start a bit lower so sky reads at the horizon (drone street feel)
     camera.position.set(span * 0.2, span * 0.45, span * 0.95)
 
     renderer = new THREE.WebGLRenderer({
@@ -153,6 +242,8 @@ export default function StudioCanvas({
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.05
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     mount.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
@@ -167,13 +258,14 @@ export default function StudioCanvas({
     const sky = makeClearSky(2800)
     scene.add(sky)
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.95))
-    const sun = new THREE.DirectionalLight(0xfff4e5, 0.9)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85))
+    const sun = new THREE.DirectionalLight(0xfff4e5, 1.05)
     sun.position.set(40, 80, 20)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(1024, 1024)
     scene.add(sun)
-    scene.add(new THREE.HemisphereLight(0xb8d4f0, 0xc4b89a, 0.35))
+    scene.add(new THREE.HemisphereLight(0xb8d4f0, 0xc4b89a, 0.4))
 
-    // Ground plane in local meters covering the aerial bbox
     const [gx0, gz0] = frame.toLocal(south, west)
     const [gx1, gz1] = frame.toLocal(north, east)
     const groundW = Math.abs(gx1 - gx0)
@@ -193,7 +285,6 @@ export default function StudioCanvas({
     ground.receiveShadow = true
     scene.add(ground)
 
-    // Invisible raycast plane
     const rayGround = new THREE.Mesh(
       new THREE.PlaneGeometry(2000, 2000),
       new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
@@ -201,7 +292,6 @@ export default function StudioCanvas({
     rayGround.rotation.x = -Math.PI / 2
     scene.add(rayGround)
 
-    // Lot fill
     const shape = new THREE.Shape(lotRing.map(([x, z]) => new THREE.Vector2(x, z)))
     const fillGeo = new THREE.ShapeGeometry(shape)
     fillGeo.rotateX(-Math.PI / 2)
@@ -218,7 +308,6 @@ export default function StudioCanvas({
     fill.position.y = 0.04
     scene.add(fill)
 
-    // Lot boundary line
     const boundaryPts = lotRing.map(([x, z]) => new THREE.Vector3(x, 0.08, z))
     boundaryPts.push(boundaryPts[0].clone())
     scene.add(
@@ -228,7 +317,6 @@ export default function StudioCanvas({
       )
     )
 
-    // Neighbor outlines for context
     for (const n of neighbors) {
       if (!n.geometry) continue
       const nRing = ringToLocal(n.geometry.coordinates[0], frame)
@@ -243,18 +331,24 @@ export default function StudioCanvas({
       )
     }
 
-    // House cutout
+    // Anchor for either builder massing or photo cutout
+    const anchor = new THREE.Group()
+    anchor.visible = false
+    anchor.position.set(0, 0, 0)
+    scene.add(anchor)
+    anchorRef.current = anchor
+
     const houseMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
     })
-    const house = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), houseMat)
-    house.visible = false
-    house.position.set(0, 1, 0)
-    scene.add(house)
-    houseRef.current = house
+    const cutout = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), houseMat)
+    cutout.visible = false
+    cutout.position.set(0, 1, 0)
+    anchor.add(cutout)
+    cutoutRef.current = cutout
     texUrlRef.current = null
 
     const shadow = new THREE.Mesh(
@@ -270,36 +364,31 @@ export default function StudioCanvas({
     shadow.position.y = 0.03
     shadow.visible = false
     scene.add(shadow)
+    shadowRef.current = shadow
 
-    const syncShadow = () => {
-      if (!house.visible) {
-        shadow.visible = false
-        return
-      }
-      shadow.visible = true
-      shadow.position.x = house.position.x
-      shadow.position.z = house.position.z
-      const s = Math.max(house.scale.x, house.scale.y) * 0.4
-      shadow.scale.set(s, s, 1)
+    // Re-apply active plan/cutout after scene rebuild
+    if (planId) {
+      planIdRef.current = planId
+      const massing = buildHouse(planId)
+      massingRef.current = massing
+      anchor.add(massing)
+      anchor.visible = true
+      const fp = houseFootprint(planId)
+      widthRef.current = houseWidthFt || fp.wM / FT_TO_M
+      syncTransform()
     }
 
     onStatus('Loading aerial photo of this lot…')
     void loadAerialTexture({ south, west, north, east }).then((aerial) => {
       if (disposed || !aerial) {
-        if (!disposed) onStatus('Aerial imagery unavailable — lot outline is still accurate. Upload a house photo to place.')
+        if (!disposed) {
+          onStatus(
+            'Aerial imagery unavailable — lot outline is still accurate. Pick a builder plan or upload a photo.'
+          )
+        }
         return
       }
-      // Remap UVs so the plane matches the stitched aerial bbox
       const uv = groundGeo.attributes.uv as THREE.BufferAttribute
-      // PlaneGeometry default UVs after rotateX(-90): need lat/lng corners
-      const corners: [number, number][] = [
-        [south, west],
-        [south, east],
-        [north, west],
-        [north, east],
-      ]
-      // Buffer order for PlaneGeometry(w,d): after rotateX, check indices
-      // Simpler: rebuild UVs from vertex XZ → lat/lng
       const pos = groundGeo.attributes.position as THREE.BufferAttribute
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i) + ground.position.x
@@ -310,7 +399,6 @@ export default function StudioCanvas({
         uv.setXY(i, u, v)
       }
       uv.needsUpdate = true
-      void corners
       aerial.texture.anisotropy = Math.min(16, renderer?.capabilities.getMaxAnisotropy() ?? 8)
       aerial.texture.colorSpace = THREE.SRGBColorSpace
       groundMat.map = aerial.texture
@@ -318,7 +406,7 @@ export default function StudioCanvas({
       groundMat.needsUpdate = true
       if (!disposed) {
         onStatus(
-          `Lot ${lot.properties.name} ready — tip the view toward the horizon for sky, or upload a house photo.`
+          `Lot ${lot.properties.name} ready — pick a builder plan below, or upload your own house photo.`
         )
       }
     })
@@ -334,19 +422,18 @@ export default function StudioCanvas({
     }
 
     const moveHouse = (e: PointerEvent) => {
-      if (!house.visible) return
+      if (!anchor.visible) return
       setFromEvent(e)
       raycaster.setFromCamera(pointer, camera)
       const hits = raycaster.intersectObject(rayGround, false)
       if (!hits[0]) return
-      house.position.x = hits[0].point.x
-      house.position.z = hits[0].point.z
-      house.position.y = groundY + house.scale.y / 2
-      syncShadow()
+      anchor.position.x = hits[0].point.x
+      anchor.position.z = hits[0].point.z
+      syncTransform()
     }
 
     const onDown = (e: PointerEvent) => {
-      if (modeRef.current !== 'place' || !house.visible) return
+      if (modeRef.current !== 'place' || !anchor.visible) return
       dragging = true
       controls.enabled = false
       renderer!.domElement.setPointerCapture(e.pointerId)
@@ -382,7 +469,6 @@ export default function StudioCanvas({
     const tick = () => {
       if (disposed) return
       controls.update()
-      syncShadow()
       renderer!.render(scene, camera)
       raf = requestAnimationFrame(tick)
     }
@@ -404,9 +490,13 @@ export default function StudioCanvas({
       groundMat.dispose()
       fillGeo.dispose()
       ;(fill.material as THREE.Material).dispose()
+      if (massingRef.current) {
+        disposeObject3D(massingRef.current)
+        massingRef.current = null
+      }
       houseMat.map?.dispose()
       houseMat.dispose()
-      house.geometry.dispose()
+      cutout.geometry.dispose()
       shadow.geometry.dispose()
       ;(shadow.material as THREE.Material).dispose()
       rayGround.geometry.dispose()
@@ -415,8 +505,14 @@ export default function StudioCanvas({
       if (renderer?.domElement.parentElement === mount) {
         mount.removeChild(renderer.domElement)
       }
-      houseRef.current = null
+      anchorRef.current = null
+      cutoutRef.current = null
+      shadowRef.current = null
+      planIdRef.current = null
+      texUrlRef.current = null
     }
+    // planId/houseWidthFt applied via separate effects after mount; include lot/neighbors only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lot, neighbors, onStatus, onLoadError])
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import StudioCanvas, { type StudioMode } from './StudioCanvas'
 import { resolveLotName, resolveWorldMode, STUDIO_WORLD } from './config'
 import { useHouseCutout } from './useHouseCutout'
 import { useStadiumLots, type StadiumLotFeature } from '../components/LotMap'
+import { studioPlans, type HomePlan } from '../data/plans'
 
 function centroid(feature: StadiumLotFeature): { lat: number; lng: number } | null {
   if (feature.properties.label) {
@@ -22,8 +23,7 @@ function centroid(feature: StadiumLotFeature): { lat: number; lng: number } | nu
 
 /**
  * Track B — Lot Studio (lot-first).
- * Aerial photo + plat lines + house photo placement. The splat experiment is
- * demoted to ?world=splat because it does not read as a sellable lot.
+ * Aerial + plat lines + builder plan drop-in (primary) or house photo (alternate).
  */
 export default function LotStudioPage() {
   const location = useLocation()
@@ -59,15 +59,37 @@ export default function LotStudioPage() {
   const [mode, setMode] = useState<StudioMode>('look')
   const [status, setStatus] = useState('Starting…')
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [planId, setPlanId] = useState<string | null>(null)
   const [widthFt, setWidthFt] = useState(STUDIO_WORLD.defaultHouseWidthFt)
   const [yawDeg, setYawDeg] = useState(0)
 
   const cutout = useHouseCutout()
+  const houseActive = Boolean(planId || cutout.objectUrl)
+  const activePlan = studioPlans.find((p) => p.id === planId) ?? null
+
+  const selectPlan = useCallback((plan: HomePlan) => {
+    cutout.clear()
+    setPlanId(plan.id)
+    setWidthFt(plan.footprintFt.width)
+    setYawDeg(0)
+    setMode('place')
+    setLoadError(null)
+  }, [cutout])
+
+  const clearHouse = useCallback(() => {
+    cutout.clear()
+    setPlanId(null)
+    setMode('look')
+    setWidthFt(STUDIO_WORLD.defaultHouseWidthFt)
+    setYawDeg(0)
+  }, [cutout])
 
   const onFile = useCallback(
     async (file: File | undefined) => {
       if (!file) return
+      setPlanId(null)
       await cutout.processFile(file)
+      setWidthFt(STUDIO_WORLD.defaultHouseWidthFt)
       setMode('place')
     },
     [cutout]
@@ -78,8 +100,7 @@ export default function LotStudioPage() {
     q.set('lot', name)
     q.delete('world')
     navigate({ pathname: '/studio', search: q.toString() })
-    cutout.clear()
-    setMode('look')
+    clearHouse()
     setLoadError(null)
   }
 
@@ -119,7 +140,8 @@ export default function LotStudioPage() {
           lot={lot}
           neighbors={neighbors}
           mode={mode}
-          houseImageUrl={cutout.objectUrl}
+          planId={planId}
+          houseImageUrl={planId ? null : cutout.objectUrl}
           houseWidthFt={widthFt}
           houseYawDeg={yawDeg}
           onStatus={setStatus}
@@ -137,6 +159,11 @@ export default function LotStudioPage() {
               ? `Lot ${lot.properties.name}${lot.properties.acreage ? ` · ${lot.properties.acreage} acres` : ''}`
               : STUDIO_WORLD.label}
           </div>
+          {activePlan && (
+            <div style={{ fontSize: 13, opacity: 0.7, marginTop: 2 }}>
+              {activePlan.name} · {activePlan.subtitle}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', pointerEvents: 'auto' }}>
           <label style={{ fontSize: 12, opacity: 0.85, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -145,9 +172,9 @@ export default function LotStudioPage() {
               value={lotName}
               onChange={(e) => selectLot(e.target.value)}
               style={{
-                background: 'rgba(0,0,0,0.35)',
-                color: '#f4f1ea',
-                border: '1px solid rgba(244,241,234,0.25)',
+                background: 'rgba(255,255,255,0.65)',
+                color: '#1a1c1e',
+                border: '1px solid rgba(26,28,30,0.2)',
                 borderRadius: 8,
                 padding: '6px 8px',
               }}
@@ -172,44 +199,68 @@ export default function LotStudioPage() {
         </div>
       </header>
 
+      <aside style={planRail} aria-label="Builder plans">
+        <div style={{ fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.55, marginBottom: 8 }}>
+          Builder plans
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {studioPlans.map((plan) => {
+            const selected = planId === plan.id
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => selectPlan(plan)}
+                style={{
+                  ...planCard,
+                  outline: selected ? '2px solid #1a1c1e' : '1px solid rgba(26,28,30,0.12)',
+                  background: selected ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.88)',
+                }}
+              >
+                <img
+                  src={plan.elevationImg}
+                  alt=""
+                  style={{
+                    width: '100%',
+                    height: 72,
+                    objectFit: 'cover',
+                    objectPosition: 'center top',
+                    display: 'block',
+                    background: '#e8e4dc',
+                  }}
+                />
+                <div style={{ padding: '8px 10px', textAlign: 'left' }}>
+                  <div style={{ fontSize: 13, fontWeight: 650 }}>{plan.name}</div>
+                  <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{plan.subtitle}</div>
+                  <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }}>
+                    {plan.footprintFt.width}′ × {plan.footprintFt.depth}′
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        <p style={{ fontSize: 11, opacity: 0.55, marginTop: 10, lineHeight: 1.4 }}>
+          Drop a Blackstone plan on this lot. Massing is approximate — not a survey.
+        </p>
+      </aside>
+
       <div style={dock}>
         <Segmented
           value={mode}
           onChange={setMode}
           options={[
             { id: 'look', label: 'Look around' },
-            { id: 'place', label: 'Move house', disabled: !cutout.objectUrl },
+            { id: 'place', label: 'Move house', disabled: !houseActive },
           ]}
         />
 
-        <label
-          style={{
-            cursor: cutout.status === 'loading' ? 'wait' : 'pointer',
-            padding: '8px 14px',
-            borderRadius: 999,
-            background: '#c4a574',
-            color: '#1a1410',
-            fontSize: 13,
-            fontWeight: 600,
-            opacity: cutout.status === 'loading' ? 0.7 : 1,
-          }}
-        >
-          {cutout.status === 'loading' ? 'Cutting out…' : 'Upload house photo'}
-          <input
-            type="file"
-            accept="image/*"
-            hidden
-            disabled={cutout.status === 'loading'}
-            onChange={(e) => void onFile(e.target.files?.[0])}
-          />
-        </label>
-
-        {cutout.objectUrl && (
+        {houseActive && (
           <>
             <Slider
               label={`Width ${widthFt} ft`}
-              min={20}
-              max={90}
+              min={40}
+              max={120}
               value={widthFt}
               onChange={setWidthFt}
             />
@@ -220,15 +271,41 @@ export default function LotStudioPage() {
               value={yawDeg}
               onChange={setYawDeg}
             />
+            <button type="button" onClick={clearHouse} style={ghostBtn}>
+              Clear house
+            </button>
           </>
         )}
+
+        <label
+          style={{
+            cursor: cutout.status === 'loading' ? 'wait' : 'pointer',
+            padding: '8px 14px',
+            borderRadius: 999,
+            background: 'transparent',
+            color: '#1a1c1e',
+            fontSize: 13,
+            fontWeight: 600,
+            border: '1px solid rgba(26,28,30,0.25)',
+            opacity: cutout.status === 'loading' ? 0.7 : 1,
+          }}
+        >
+          {cutout.status === 'loading' ? 'Cutting out…' : 'Upload your photo'}
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            disabled={cutout.status === 'loading'}
+            onChange={(e) => void onFile(e.target.files?.[0])}
+          />
+        </label>
       </div>
 
       <div style={statusBox}>
         {loadError ? <span style={{ color: '#8b2e2e' }}>{loadError}</span> : status}
         {cutout.error && <div style={{ color: '#6b4e16', marginTop: 4 }}>{cutout.error}</div>}
         <div style={{ marginTop: 6, opacity: 0.65, fontSize: 11 }}>
-          Aerial · plat outline · photo placement (approximate — not a survey)
+          Aerial · plat outline · builder plans (approx.) · custom photo optional
         </div>
       </div>
     </div>
@@ -272,7 +349,6 @@ const linkBtn: CSSProperties = {
   textDecoration: 'none',
   fontSize: 13,
   opacity: 0.85,
-  borderBottom: '1px solid rgba(26,28,30,0.35)',
   background: 'none',
   border: 'none',
   borderBottomWidth: 1,
@@ -281,6 +357,30 @@ const linkBtn: CSSProperties = {
   cursor: 'pointer',
   padding: 0,
   fontFamily: 'inherit',
+}
+
+const planRail: CSSProperties = {
+  position: 'absolute',
+  top: 88,
+  right: 16,
+  width: 200,
+  maxHeight: 'calc(100vh - 200px)',
+  overflowY: 'auto',
+  zIndex: 2,
+  padding: 10,
+  borderRadius: 14,
+  background: 'rgba(255,255,255,0.82)',
+  backdropFilter: 'blur(10px)',
+  border: '1px solid rgba(26,28,30,0.1)',
+}
+
+const planCard: CSSProperties = {
+  padding: 0,
+  borderRadius: 10,
+  overflow: 'hidden',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  color: 'inherit',
 }
 
 const dock: CSSProperties = {
@@ -300,6 +400,18 @@ const dock: CSSProperties = {
   backdropFilter: 'blur(10px)',
   border: '1px solid rgba(26,28,30,0.1)',
   zIndex: 2,
+  color: '#1a1c1e',
+}
+
+const ghostBtn: CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 999,
+  border: '1px solid rgba(26,28,30,0.2)',
+  background: 'transparent',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
   color: '#1a1c1e',
 }
 

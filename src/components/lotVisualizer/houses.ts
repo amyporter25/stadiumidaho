@@ -3,7 +3,7 @@ import { FT_TO_M } from './geo'
 
 /**
  * Simplified-but-recognizable 3D massing for each Blackstone plan, built
- * from the footprint dimensions and the elevation photos. The goal is not
+ * from the footprint dimensions and the elevation sheets. The goal is not
  * photorealism — it's that a buyer standing on the street can read
  * "that's the Brownstone": right scale, right roofline, garage where the
  * garage is, porch where the porch is.
@@ -14,41 +14,99 @@ import { FT_TO_M } from './geo'
  * we rotate per-lot to face the actual road).
  */
 
+type GarageEntry = 'front' | 'side'
+
 interface HouseSpec {
   widthFt: number
   depthFt: number
   wallM: number // wall height
   roofRiseM: number // ridge height above walls
+  /** Garage wing side when looking at the front */
   garageWing: 'right' | 'left' | 'none'
+  garageEntry: GarageEntry
   garageWidthFrac: number // fraction of total width
   garageHeightM: number
   porchDepthM: number
   siding: number
   roof: number
   trim: number
+  stone?: number
 }
 
 const SPECS: Record<string, HouseSpec> = {
   brownstone: {
-    widthFt: 96, depthFt: 78,
-    wallM: 3.4, roofRiseM: 2.6,
-    garageWing: 'right', garageWidthFrac: 0.42, garageHeightM: 4.6, // RV bay is tall
-    porchDepthM: 4.3,
-    siding: 0xd8d2c4, roof: 0x6b6357, trim: 0xb59a6d,
+    widthFt: 91,
+    depthFt: 72,
+    wallM: 3.4,
+    roofRiseM: 2.6,
+    garageWing: 'left',
+    garageEntry: 'front',
+    garageWidthFrac: 0.4,
+    garageHeightM: 4.6,
+    porchDepthM: 4.0,
+    siding: 0xd8d2c4,
+    roof: 0x6b6357,
+    trim: 0xb59a6d,
+    stone: 0x8a8070,
   },
-  whitestone: {
-    widthFt: 94, depthFt: 82,
-    wallM: 3.2, roofRiseM: 2.9,
-    garageWing: 'right', garageWidthFrac: 0.4, garageHeightM: 4.6,
+  // Front-facing Whitestone (whitestone-7-2-rwr.pdf)
+  'whitestone-front': {
+    widthFt: 94,
+    depthFt: 70,
+    wallM: 3.2,
+    roofRiseM: 2.9,
+    garageWing: 'left',
+    garageEntry: 'front',
+    garageWidthFrac: 0.42,
+    garageHeightM: 4.6,
     porchDepthM: 3.0,
-    siding: 0xe9e6dd, roof: 0x30302f, trim: 0x9c7b52,
+    siding: 0xe9e6dd,
+    roof: 0x30302f,
+    trim: 0x9c7b52,
+  },
+  // Side-entry Whitestone (whitestone-29-3-pse.pdf)
+  'whitestone-side': {
+    widthFt: 94,
+    depthFt: 78,
+    wallM: 3.2,
+    roofRiseM: 2.9,
+    garageWing: 'left',
+    garageEntry: 'side',
+    garageWidthFrac: 0.4,
+    garageHeightM: 4.6,
+    porchDepthM: 3.0,
+    siding: 0xe9e6dd,
+    roof: 0x30302f,
+    trim: 0x9c7b52,
+  },
+  // Legacy alias used by older LotVisualizer state
+  whitestone: {
+    widthFt: 94,
+    depthFt: 70,
+    wallM: 3.2,
+    roofRiseM: 2.9,
+    garageWing: 'left',
+    garageEntry: 'front',
+    garageWidthFrac: 0.42,
+    garageHeightM: 4.6,
+    porchDepthM: 3.0,
+    siding: 0xe9e6dd,
+    roof: 0x30302f,
+    trim: 0x9c7b52,
   },
   sunstone: {
-    widthFt: 104, depthFt: 72,
-    wallM: 3.3, roofRiseM: 2.7,
-    garageWing: 'right', garageWidthFrac: 0.44, garageHeightM: 4.6,
+    widthFt: 104,
+    depthFt: 72,
+    wallM: 3.3,
+    roofRiseM: 2.7,
+    garageWing: 'right',
+    garageEntry: 'front',
+    garageWidthFrac: 0.44,
+    garageHeightM: 4.6,
     porchDepthM: 3.2,
-    siding: 0xded8cc, roof: 0x55504a, trim: 0x8a6a48,
+    siding: 0xded8cc,
+    roof: 0x55504a,
+    trim: 0x8a6a48,
   },
 }
 
@@ -68,14 +126,12 @@ function gabledBlock(
 ): THREE.Group {
   const g = new THREE.Group()
 
-  // walls
   const walls = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat)
   walls.position.y = wallH / 2
   walls.castShadow = true
   walls.receiveShadow = true
   g.add(walls)
 
-  // roof: triangular prism via ExtrudeGeometry of a triangle, ridge along x
   const hw = w / 2 + overhang
   const shape = new THREE.Shape()
   shape.moveTo(-hw, 0)
@@ -87,7 +143,6 @@ function gabledBlock(
     bevelEnabled: false,
   })
   roofGeo.translate(0, 0, -(d + overhang * 2) / 2)
-  // rotate so ridge runs along x (extrude makes ridge along z by default) — keep as is: ridge along z here
   const roof = new THREE.Mesh(roofGeo, roofMat)
   roof.position.y = wallH
   roof.castShadow = true
@@ -97,7 +152,7 @@ function gabledBlock(
   return g
 }
 
-/** gabled block with ridge running front-to-back (z) — for garage wings */
+/** gabled block with ridge running front-to-back (z) — for the main house */
 function gabledBlockZ(
   w: number,
   d: number,
@@ -112,54 +167,96 @@ function gabledBlockZ(
   return g
 }
 
+function resolveSpec(planId: string): HouseSpec {
+  return SPECS[planId] ?? SPECS.brownstone
+}
+
 export function buildHouse(planId: string): THREE.Group {
-  const spec = SPECS[planId] ?? SPECS.brownstone
+  const spec = resolveSpec(planId)
   const W = spec.widthFt * FT_TO_M
   const D = spec.depthFt * FT_TO_M
 
   const siding = mat(spec.siding)
   const roof = mat(spec.roof, 0.95)
   const trim = mat(spec.trim, 0.8)
+  const doorMat = mat(0x3a3530, 0.85)
   const glass = new THREE.MeshStandardMaterial({
-    color: 0x2a3540, roughness: 0.2, metalness: 0.6,
+    color: 0x2a3540,
+    roughness: 0.2,
+    metalness: 0.6,
   })
 
   const house = new THREE.Group()
+  house.name = `house-${planId}`
 
   const garageW = W * spec.garageWidthFrac
   const mainW = W - garageW
-  const mainX = -W / 2 + mainW / 2 // main block to the left
+  const garageOnLeft = spec.garageWing === 'left'
+  const mainX = garageOnLeft ? -W / 2 + garageW + mainW / 2 : -W / 2 + mainW / 2
+  const garageX = garageOnLeft ? -W / 2 + garageW / 2 : W / 2 - garageW / 2
 
-  // main house block, ridge front-to-back for the farmhouse look
+  // Main living block
   const main = gabledBlockZ(mainW, D * 0.92, spec.wallM, spec.roofRiseM, siding, roof)
   main.position.set(mainX, 0, D * 0.02)
   house.add(main)
 
-  // garage wing (taller RV bay), ridge left-to-right, stepped slightly forward
   if (spec.garageWing !== 'none') {
+    const garageDepth = D * (spec.garageEntry === 'side' ? 0.88 : 0.8)
     const garage = gabledBlock(
-      garageW, D * 0.8, spec.garageHeightM, spec.roofRiseM * 0.85, siding, roof
+      garageW,
+      garageDepth,
+      spec.garageHeightM,
+      spec.roofRiseM * 0.85,
+      siding,
+      roof
     )
-    garage.position.set(W / 2 - garageW / 2, 0, -D * 0.04)
+    garage.position.set(garageX, 0, -D * 0.02)
     house.add(garage)
 
-    // garage door on the front face
-    const door = new THREE.Mesh(
-      new THREE.BoxGeometry(garageW * 0.62, spec.garageHeightM * 0.72, 0.12),
-      trim
-    )
-    door.position.set(
-      W / 2 - garageW / 2,
-      spec.garageHeightM * 0.36,
-      -D * 0.04 - (D * 0.8) / 2 - 0.06
-    )
-    house.add(door)
+    const garageFrontZ = -D * 0.02 - garageDepth / 2 - 0.06
+
+    if (spec.garageEntry === 'front') {
+      // Tall RV bay door + wider double door, both facing the street
+      const rvW = garageW * 0.38
+      const dblW = garageW * 0.48
+      const doorH = spec.garageHeightM * 0.72
+      const rv = new THREE.Mesh(new THREE.BoxGeometry(rvW, doorH * 1.15, 0.12), doorMat)
+      const dbl = new THREE.Mesh(new THREE.BoxGeometry(dblW, doorH, 0.12), doorMat)
+      const gap = 0.25
+      const pairW = rvW + dblW + gap
+      const startX = garageX - pairW / 2
+      rv.position.set(startX + rvW / 2, doorH * 1.15 * 0.5, garageFrontZ)
+      dbl.position.set(startX + rvW + gap + dblW / 2, doorH * 0.5, garageFrontZ)
+      house.add(rv, dbl)
+    } else {
+      // Side-entry: tall RV door still on the front; main doors on the outer side
+      const rvW = garageW * 0.55
+      const rvH = spec.garageHeightM * 0.82
+      const rv = new THREE.Mesh(new THREE.BoxGeometry(rvW, rvH, 0.12), doorMat)
+      rv.position.set(garageX, rvH * 0.5, garageFrontZ)
+      house.add(rv)
+
+      const sideDoorW = garageDepth * 0.55
+      const sideDoorH = spec.garageHeightM * 0.62
+      const sideDoor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, sideDoorH, sideDoorW),
+        doorMat
+      )
+      const sideX = garageOnLeft
+        ? garageX - garageW / 2 - 0.06
+        : garageX + garageW / 2 + 0.06
+      sideDoor.position.set(sideX, sideDoorH * 0.5, -D * 0.02)
+      house.add(sideDoor)
+    }
   }
 
-  // front porch: low slab + posts + shed roof
-  const porchW = mainW * 0.5
+  // Front porch
+  const porchW = mainW * 0.48
   const porch = new THREE.Group()
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(porchW, 0.18, spec.porchDepthM), trim)
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(porchW, 0.18, spec.porchDepthM),
+    trim
+  )
   slab.position.y = 0.09
   porch.add(slab)
   const shedRoof = new THREE.Mesh(
@@ -180,15 +277,17 @@ export function buildHouse(planId: string): THREE.Group {
   porch.position.set(mainX, 0, -D * 0.44 - spec.porchDepthM / 2 + 0.2)
   house.add(porch)
 
-  // front door
-  const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.3, 0.1), trim)
-  door.position.set(mainX, 1.15, -D * 0.44 - 0.05)
-  house.add(door)
+  // Front door
+  const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.3, 0.1), trim)
+  frontDoor.position.set(mainX, 1.15, -D * 0.44 - 0.05)
+  house.add(frontDoor)
 
-  // a few windows on the front face for scale
+  // Windows on the front face for scale
   const winGeo = new THREE.BoxGeometry(1.4, 1.6, 0.08)
   const frontZ = -D * 0.46
-  const winXs = [-W * 0.32, -W * 0.14, W * 0.06]
+  const winXs = garageOnLeft
+    ? [mainX - mainW * 0.22, mainX + mainW * 0.18, mainX + mainW * 0.38]
+    : [mainX - mainW * 0.38, mainX - mainW * 0.18, mainX + mainW * 0.22]
   for (const wx of winXs) {
     const win = new THREE.Mesh(winGeo, glass)
     win.position.set(wx, 1.7, frontZ)
@@ -206,6 +305,6 @@ export function buildHouse(planId: string): THREE.Group {
 }
 
 export function houseFootprint(planId: string): { wM: number; dM: number } {
-  const spec = SPECS[planId] ?? SPECS.brownstone
+  const spec = resolveSpec(planId)
   return { wM: spec.widthFt * FT_TO_M, dM: spec.depthFt * FT_TO_M }
 }

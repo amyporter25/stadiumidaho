@@ -171,7 +171,10 @@ headlessly, but three.js scenes can:
 
 Greenfield experience at **`/studio`**. See `src/studio/README.md`.
 
-**Current default (lot-first):** aerial imagery + plat outline + house photo cutout.
+**Current default (lot-first):** aerial imagery + plat outline + **builder plan
+drop-in** (Brownstone, Whitestone front garage, Whitestone side-entry) with
+optional house photo cutout as the custom path.
+Construction PDFs: `public/plans/*-{rwr,pse}.pdf`. Catalog: `src/data/plans.ts`.
 The Polycam site-wide Gaussian splat was tried and rejected as a “blotchy blob” —
 kept on disk (`public/splats/stadium-3d-two.splat`) but not shown by default.
 Intentionally not wired into `LotDetail` yet.
@@ -185,8 +188,9 @@ Intentionally not wired into `LotDetail` yet.
 3. **Pano polish for 46/3:** horizon band is slightly wavy; ground below the frame is a flat fill;
    fine at normal zoom but a re-shoot with a steadier pan would improve it. `rotationY`/horizon
    height (`position.y = -12`) may want nudging after owner review.
-4. **Real house geometry:** plans are box massings. `Brownstone_floorplan.png` is available to
-   model from; owner cares about *placement and scale*, not architecture (keep the disclaimer).
+4. **Real house geometry:** Studio uses simplified massings from builder PDFs (footprint +
+   garage entry). Owner cares about *placement and scale*, not architecture (keep the disclaimer).
+   Photo upload remains for custom homes.
 5. **StreetWalk.tsx / splats:** dead code kept for reference (`public/splats/*.ksplat` still
    ships, ~30 MB — candidate for repo-size cleanup once owner confirms they're not coming back).
 6. Preview/versioning is platform-managed (Kimi `website_version_manager`); if previews white-screen,

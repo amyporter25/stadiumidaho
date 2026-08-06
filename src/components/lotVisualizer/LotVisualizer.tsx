@@ -739,7 +739,11 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
                     color: planId === p.id ? '#f2b04a' : 'rgba(255,255,255,0.75)', cursor: 'pointer',
                   }}
                 >
-                  {p.name}
+                  {p.id === 'whitestone-front'
+                    ? 'Whitestone · front'
+                    : p.id === 'whitestone-side'
+                      ? 'Whitestone · side'
+                      : p.name.replace(/^The /, '')}
                 </button>
               ))}
             </div>

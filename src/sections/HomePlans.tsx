@@ -182,6 +182,16 @@ export default function HomePlans() {
                   >
                     {plan.name}
                   </p>
+                  <p
+                    style={{
+                      fontSize: '13px',
+                      color: '#555555',
+                      marginTop: '4px',
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {plan.subtitle}
+                  </p>
                 </div>
                 <span
                   style={{
@@ -263,6 +273,9 @@ export default function HomePlans() {
                   }}
                 >
                   {selected.name}
+                </p>
+                <p style={{ fontSize: '13px', color: '#555555', marginTop: '4px' }}>
+                  {selected.subtitle}
                 </p>
               </div>
               <button
@@ -350,6 +363,19 @@ export default function HomePlans() {
                 {selected.porches.map((p, i) => (
                   <Spec key={p} k={i === 0 ? 'Porches' : ''} v={p} />
                 ))}
+                <dt style={{ fontSize: '11px', letterSpacing: '0.16em', textTransform: 'uppercase', color: '#888', marginTop: 8 }}>
+                  Construction PDF
+                </dt>
+                <dd style={{ margin: 0 }}>
+                  <a
+                    href={selected.pdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 14, color: '#000', textDecoration: 'underline' }}
+                  >
+                    Open full plan set →
+                  </a>
+                </dd>
               </dl>
               <ul
                 style={{
