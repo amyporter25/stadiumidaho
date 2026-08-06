@@ -365,9 +365,9 @@ export function buildWhitestoneHouse(): THREE.Group {
   // Rear side windows
   addWindow(
     house,
-    livingX + livingW * 0.2,
+    livingX + livingW * 0.22,
     1.65,
-    rearZ + D * 0.05,
+    rearFaceZ - 0.15,
     1.8,
     1.45,
     false,
@@ -377,9 +377,9 @@ export function buildWhitestoneHouse(): THREE.Group {
   )
   addWindow(
     house,
-    garageX + garageW * 0.15,
+    garageX + garageW * 0.2,
     1.65,
-    rearZ - D * 0.05,
+    rearZ + D * 0.02,
     1.6,
     1.45,
     false,
@@ -389,12 +389,9 @@ export function buildWhitestoneHouse(): THREE.Group {
   )
 
   // Wood columns flanking rear glass
-  for (const px of [
-    entryX + entryW * 0.15 - wallGlassW / 2 - 0.2,
-    entryX + entryW * 0.15 + wallGlassW / 2 + 0.2,
-  ]) {
+  for (const px of [rearCenterX - wallGlassW / 2 - 0.25, rearCenterX + wallGlassW / 2 + 0.25]) {
     const col = new THREE.Mesh(new THREE.BoxGeometry(0.32, wallH * 0.95, 0.32), wood)
-    col.position.set(px, wallH * 0.48, rearZ + D * 0.1)
+    col.position.set(px, wallH * 0.48, rearFaceZ - 0.05)
     house.add(col)
   }
 
