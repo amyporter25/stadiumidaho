@@ -114,7 +114,6 @@ export default function StudioCanvas({
   const drivewayRef = useRef<THREE.Mesh | null>(null)
   const landscapeRef = useRef<THREE.Group | null>(null)
   const frontMidRef = useRef<[number, number]>([0, 0])
-  const groundY = 0.05
   const controlsRef = useRef<OrbitControls | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const widthRef = useRef(houseWidthFt)
@@ -165,7 +164,10 @@ export default function StudioCanvas({
       const aspect = (cutout.userData.aspect as number) || 1.6
       const h = w / aspect
       cutout.scale.set(w, h, 1)
-      cutout.position.y = groundY + h / 2
+      // Seat the billboard on the pave so the foundation line meets the apron
+      // (not floating above a grass strip).
+      const paveTop = 0.12
+      cutout.position.y = paveTop + h / 2
 
       // Footprint pad stays hidden while a house is placed — the dark pad was
       // reading as a “gap” between driveway and garage.
@@ -181,10 +183,11 @@ export default function StudioCanvas({
       const garageX = -garageFrac * w
       if (approach) {
         if (plan?.garageEntry === 'side') {
-          approach.position.set(garageX - Math.sign(garageX || 1) * 0.5, 0, 0.25)
+          // Side-entry: tip sits just off the side wall toward the street approach
+          approach.position.set(garageX - Math.sign(garageX || 1) * 0.35, 0, -0.05)
         } else {
-          // On the facade plane — tip overshoot in syncDriveway pulls pave under the door
-          approach.position.set(garageX, 0, 0.15)
+          // On the facade plane at the garage door; syncDriveway overshoots under the door
+          approach.position.set(garageX, 0, 0)
         }
       }
     } else if (apronRef.current) {
@@ -452,12 +455,12 @@ export default function StudioCanvas({
       )
     )
 
-    // Street-front marker (where driveway starts)
-    const curb = new THREE.Mesh(
-      new THREE.BoxGeometry(4.5, 0.18, 0.55),
-      new THREE.MeshStandardMaterial({ color: 0x6e6e70, roughness: 0.95 })
-    )
-    curb.position.set(frontMid[0], 0.1, frontMid[1])
+    // Street-front curb marker — same family as pave so it reads as the start
+    // of the driveway, not a disconnected dark block.
+    const curbMat = new THREE.MeshStandardMaterial({ color: 0xb8b6ae, roughness: 0.95 })
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.12, 0.7), curbMat)
+    curb.position.set(frontMid[0], 0.08, frontMid[1])
+    curb.name = 'streetCurb'
     scene.add(curb)
 
     for (const n of neighbors) {
@@ -492,8 +495,9 @@ export default function StudioCanvas({
     cutout.position.set(0, 1, 0)
     // Face the street (−z): PlaneGeometry faces +z by default
     cutout.rotation.y = Math.PI
-    // Tiny lean so the facade still peeks when glancing from above
-    cutout.rotation.x = -0.04
+    // Slight lean so the facade still peeks when glancing from above, without
+    // lifting the foundation line off the apron.
+    cutout.rotation.x = -0.02
     anchor.add(cutout)
     cutoutRef.current = cutout
     texUrlRef.current = null
@@ -577,10 +581,10 @@ export default function StudioCanvas({
         return
       }
 
-      // World-space garage door (on the facade) — ribbon tip + apron end here
+      // World-space garage door on the facade — ribbon runs curb → under the door
       const approach = approachRef.current
       if (approach) approach.getWorldPosition(worldDoor)
-      else worldDoor.set(anchor.position.x, 0, anchor.position.z)
+      else worldDoor.set(anchorRef.current.position.x, 0, anchorRef.current.position.z)
 
       const [fx, fz] = frontMidRef.current
       let dx = worldDoor.x - fx
@@ -595,20 +599,28 @@ export default function StudioCanvas({
       const ux = dx / len
       const uz = dz / len
 
-      // Push tip well under the facade / garage door so pavement meets the house
-      const tipX = worldDoor.x + ux * 4.0
-      const tipZ = worldDoor.z + uz * 4.0
+      // Overshoot past the facade into the house mass so pave reads as going
+      // all the way under the garage door (billboard has no depth).
+      const tipX = worldDoor.x + ux * 6.0
+      const tipZ = worldDoor.z + uz * 6.0
       dx = tipX - fx
       dz = tipZ - fz
       len = Math.hypot(dx, dz)
 
-      const widthM = 16 * FT_TO_M
+      const widthM = 18 * FT_TO_M
       const isConcrete = materialRef.current === 'concrete'
       const pave = isConcrete ? 0xc4c2ba : 0x555558
 
-      // Continuous ribbon: curb → under garage door (no gap)
+      // Match curb to the active pave so the street start doesn't look detached
+      const curbMesh = scene.getObjectByName('streetCurb') as THREE.Mesh | undefined
+      if (curbMesh) {
+        const cm = curbMesh.material as THREE.MeshStandardMaterial
+        cm.color.set(isConcrete ? 0xb0aea6 : 0x4a4a4e)
+      }
+
+      // Continuous ribbon: curb → under garage door
       driveway.visible = true
-      driveway.position.set((fx + tipX) / 2, 0.09, (fz + tipZ) / 2)
+      driveway.position.set((fx + tipX) / 2, 0.1, (fz + tipZ) / 2)
       driveway.scale.set(widthM, 1, len)
       driveway.rotation.y = Math.atan2(dx, dz)
       driveway.renderOrder = 2
@@ -617,22 +629,22 @@ export default function StudioCanvas({
       drivewayMat.color.set(pave)
       drivewayMat.depthWrite = true
 
-      // Wider apron overlapping the last stretch — same pave color, no seam
+      // Wide garage apron overlapping the last stretch — same pave, no seam
       if (apronRef.current) {
         const apronMesh = apronRef.current
         const am = apronMesh.material as THREE.MeshStandardMaterial
         am.color.set(pave)
         am.depthWrite = true
-        const apronLen = Math.min(Math.max(10, len * 0.24), 16)
+        const apronLen = Math.min(Math.max(14, len * 0.32), 24)
         worldApronOuter.set(tipX - ux * apronLen, 0, tipZ - uz * apronLen)
         apronMesh.visible = true
         apronMesh.renderOrder = 3
         apronMesh.position.set(
           (worldApronOuter.x + tipX) / 2,
-          0.1,
+          0.11,
           (worldApronOuter.z + tipZ) / 2
         )
-        apronMesh.scale.set(widthM * 1.75, 1, apronLen)
+        apronMesh.scale.set(widthM * 2.05, 1.15, apronLen)
         apronMesh.rotation.set(0, Math.atan2(dx, dz), 0)
       }
 
