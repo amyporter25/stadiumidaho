@@ -9,6 +9,10 @@ import {
   type LocalFrame,
 } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
+import {
+  applyFacadeTexture,
+  buildStudioHouse,
+} from '../components/lotVisualizer/houses'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -107,6 +111,9 @@ export default function StudioCanvas({
   const plantKindRef = useRef(plantKind)
   const materialRef = useRef(drivewayMaterial)
   const anchorRef = useRef<THREE.Group | null>(null)
+  /** Plan-based 3D massing + photoreal street facade (builder plans). */
+  const massingRef = useRef<THREE.Group | null>(null)
+  /** Flat cutout for custom uploaded photos only. */
   const cutoutRef = useRef<THREE.Mesh | null>(null)
   const approachRef = useRef<THREE.Object3D | null>(null)
   const apronRef = useRef<THREE.Mesh | null>(null)
@@ -123,21 +130,28 @@ export default function StudioCanvas({
   const frameRef = useRef<LocalFrame | null>(null)
   const syncDrivewayRef = useRef<() => void>(() => {})
 
-  /** Pull the camera down to a street-level view of the house front.
-   * Photoreal cutouts only read correctly from this angle — from straight
-   * overhead they collapse to a thin edge. */
+  const houseIsLive = () =>
+    Boolean(massingRef.current?.visible || cutoutRef.current?.visible)
+
+  /** Street-level view of the front elevation (facade faces −z). */
   const frameHouseStreetView = () => {
     const camera = cameraRef.current
     const controls = controlsRef.current
     const anchor = anchorRef.current
-    const cutout = cutoutRef.current
-    if (!camera || !controls || !anchor || !cutout?.visible) return
+    if (!camera || !controls || !anchor || !houseIsLive()) return
 
     const yaw = anchor.rotation.y
-    // Stand in front of the facade (house front is −z in local space)
-    const dist = Math.max(28, cutout.scale.x * 0.85)
-    const eyeH = Math.max(4.5, cutout.scale.y * 0.42)
-    const lookY = cutout.scale.y * 0.35
+    const massing = massingRef.current
+    const cutout = cutoutRef.current
+    const widthM = massing?.visible
+      ? (massing.userData.widthM as number) * massing.scale.x
+      : cutout!.scale.x
+    const heightM = massing?.visible
+      ? ((massing.userData.facadeHeightM as number) || 8) * massing.scale.y
+      : cutout!.scale.y
+    const dist = Math.max(32, widthM * 0.9)
+    const eyeH = Math.max(5, heightM * 0.45)
+    const lookY = heightM * 0.38
     camera.position.set(
       anchor.position.x - Math.sin(yaw) * dist,
       eyeH,
@@ -153,65 +167,120 @@ export default function StudioCanvas({
   widthRef.current = houseWidthFt
   yawRef.current = houseYawDeg
 
+  const clearMassing = () => {
+    const anchor = anchorRef.current
+    const massing = massingRef.current
+    if (massing && anchor) {
+      anchor.remove(massing)
+      disposeObject3D(massing)
+    }
+    massingRef.current = null
+  }
+
   const syncTransform = () => {
     const anchor = anchorRef.current
     if (!anchor || !anchor.visible) return
     anchor.rotation.y = THREE.MathUtils.degToRad(yawRef.current)
 
+    const pad = anchor.getObjectByName('footprintPad') as THREE.Mesh | undefined
+    if (pad) pad.visible = false
+
+    const massing = massingRef.current
+    if (massing?.visible) {
+      const baseW = (massing.userData.widthM as number) || 1
+      const scale = (widthRef.current * FT_TO_M) / baseW
+      massing.scale.set(scale, scale, scale)
+      // Use the massing's built-in garageApproach (plan footprint–accurate).
+      // approachRef lives on the anchor (unscaled), so bake massing scale in.
+      const builtIn = massing.getObjectByName('garageApproach')
+      if (builtIn && approachRef.current) {
+        approachRef.current.position.set(
+          builtIn.position.x * scale,
+          0,
+          builtIn.position.z * scale
+        )
+      }
+    }
+
     const cutout = cutoutRef.current
-    if (cutout?.visible) {
+    if (cutout?.visible && !massing?.visible) {
       const w = widthRef.current * FT_TO_M
       const aspect = (cutout.userData.aspect as number) || 1.6
       const h = w / aspect
       cutout.scale.set(w, h, 1)
-      // Seat the billboard on the pave so the foundation line meets the apron
-      // (not floating above a grass strip).
       const paveTop = 0.12
       cutout.position.y = paveTop + h / 2
 
-      // Footprint pad stays hidden while a house is placed — the dark pad was
-      // reading as a “gap” between driveway and garage.
-      const pad = anchor.getObjectByName('footprintPad') as THREE.Mesh | undefined
-      if (pad) pad.visible = false
-
-      // Garage door marker on the facade.
-      // Cutout is rotated Y=π (faces street), which mirrors +x → image-right
-      // garage sits at local −x in anchor space.
       const approach = approachRef.current
       const plan = planIdRef.current ? getPlan(planIdRef.current) : null
       const garageFrac = plan?.garageXFrac ?? 0.35
+      // Custom photo cutout is Y-π mirrored → image-right garage at local −x
       const garageX = -garageFrac * w
       if (approach) {
         if (plan?.garageEntry === 'side') {
-          // Side-entry: tip sits just off the side wall toward the street approach
           approach.position.set(garageX - Math.sign(garageX || 1) * 0.35, 0, -0.05)
         } else {
-          // On the facade plane at the garage door; syncDriveway overshoots under the door
           approach.position.set(garageX, 0, 0)
         }
       }
-    } else if (apronRef.current) {
+    } else if (!massing?.visible && apronRef.current) {
       apronRef.current.visible = false
     }
 
     const shadow = shadowRef.current
-    if (shadow && cutout?.visible) {
-      // Keep the contact shadow very soft — a dark disc was reading as a gap
-      // between pave and the garage doors.
+    if (shadow && houseIsLive()) {
       shadow.visible = true
       shadow.position.x = anchor.position.x
       shadow.position.z = anchor.position.z
-      const span = Math.max(cutout.scale.x, cutout.scale.y) * 0.28
+      const span = massing?.visible
+        ? ((massing.userData.widthM as number) * massing.scale.x) * 0.45
+        : Math.max(cutout!.scale.x, cutout!.scale.y) * 0.28
       shadow.scale.set(span, span, 1)
     }
 
     syncDrivewayRef.current()
   }
 
+  /** Builder plan → 3D footprint massing + photoreal street facade. */
+  const loadPlanHouse = (planId: string, statusMsg: string, frameView = false) => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+    const plan = getPlan(planId)
+    if (!plan?.cutoutImg) {
+      onLoadError('This plan is missing a house image.')
+      return
+    }
+
+    clearMassing()
+    if (cutoutRef.current) cutoutRef.current.visible = false
+
+    const house = buildStudioHouse(planId)
+    house.visible = true
+    anchor.add(house)
+    massingRef.current = house
+    anchor.visible = true
+    texUrlRef.current = plan.cutoutImg
+
+    new THREE.TextureLoader().load(
+      plan.cutoutImg,
+      (tex) => {
+        applyFacadeTexture(house, tex)
+        syncTransform()
+        if (frameView) frameHouseStreetView()
+        onStatus(statusMsg)
+      },
+      undefined,
+      () => onLoadError('Could not load the house elevation.')
+    )
+  }
+
+  /** Custom uploaded photo → flat cutout billboard (best-effort). */
   const loadCutoutTexture = (url: string, statusMsg: string, frameView = false) => {
     const mesh = cutoutRef.current
     const anchor = anchorRef.current
     if (!mesh || !anchor) return
+
+    clearMassing()
 
     const apply = (tex: THREE.Texture) => {
       tex.colorSpace = THREE.SRGBColorSpace
@@ -224,7 +293,6 @@ export default function StudioCanvas({
       mat.map = tex
       mat.color.set(0xffffff)
       mat.transparent = true
-      // Low alphaTest — high values chewed holes in bright windows/siding
       mat.alphaTest = 0.05
       mat.depthWrite = false
       mat.side = THREE.DoubleSide
@@ -270,7 +338,7 @@ export default function StudioCanvas({
     onLandscapeCostChange(0, 0)
   }, [landscapeRevision, onLandscapeCostChange])
 
-  // Builder plan → photoreal marketing cutout (not procedural boxes / PDF line art)
+  // Builder plan → 3D footprint massing + photoreal street facade
   useEffect(() => {
     const anchor = anchorRef.current
     if (!anchor) return
@@ -279,10 +347,12 @@ export default function StudioCanvas({
 
     if (!planId) {
       if (!houseImageUrl) {
+        clearMassing()
         if (cutoutRef.current) cutoutRef.current.visible = false
         anchor.visible = false
         if (shadowRef.current) shadowRef.current.visible = false
         if (drivewayRef.current) drivewayRef.current.visible = false
+        if (apronRef.current) apronRef.current.visible = false
         onDrivewayChange(null)
       }
       return
@@ -299,7 +369,7 @@ export default function StudioCanvas({
     const [fx, fz] = frontMidRef.current
     const distToCurb = Math.hypot(anchor.position.x - fx, anchor.position.z - fz)
     const needsSeat =
-      !cutoutRef.current?.visible || distToCurb > 140 * FT_TO_M || distToCurb < 20 * FT_TO_M
+      !houseIsLive() || distToCurb > 140 * FT_TO_M || distToCurb < 20 * FT_TO_M
     if (needsSeat) {
       const inwardX = 0 - fx
       const inwardZ = 0 - fz
@@ -321,9 +391,9 @@ export default function StudioCanvas({
     onYawSuggest(yawDeg)
     yawRef.current = yawDeg
 
-    loadCutoutTexture(
-      plan.cutoutImg,
-      `${plan.name} on the lot — street view of the real elevation. Drag to move; driveway updates with placement.`,
+    loadPlanHouse(
+      planId,
+      `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`,
       true
     )
   }, [planId, houseImageUrl, onStatus, onYawSuggest, onDrivewayChange, onLoadError])
@@ -593,17 +663,20 @@ export default function StudioCanvas({
     const worldDoor = new THREE.Vector3()
     const worldApronOuter = new THREE.Vector3()
     const syncDriveway = () => {
-      if (!drivewayRef.current || !anchorRef.current?.visible || !cutoutRef.current?.visible) {
+      const live =
+        Boolean(anchorRef.current?.visible) &&
+        Boolean(massingRef.current?.visible || cutoutRef.current?.visible)
+      if (!drivewayRef.current || !live) {
         if (drivewayRef.current) drivewayRef.current.visible = false
         if (apronRef.current) apronRef.current.visible = false
         onDrivewayChange(null)
         return
       }
 
-      // World-space garage door on the facade — ribbon runs curb → under the door
+      // World-space garage door — ribbon runs curb → under the door / into the volume
       const approach = approachRef.current
       if (approach) approach.getWorldPosition(worldDoor)
-      else worldDoor.set(anchorRef.current.position.x, 0, anchorRef.current.position.z)
+      else worldDoor.set(anchorRef.current!.position.x, 0, anchorRef.current!.position.z)
 
       const [fx, fz] = frontMidRef.current
       let dx = worldDoor.x - fx
@@ -690,9 +763,19 @@ export default function StudioCanvas({
       yawRef.current = yawDeg
       widthRef.current = houseWidthFt
       if (plan?.cutoutImg) {
-        loadCutoutTexture(
-          plan.cutoutImg,
-          `${plan.name} on the lot — street view of the real elevation.`,
+        // Seat near street on first scene boot with a plan already selected
+        const inwardX = 0 - frontMid[0]
+        const inwardZ = 0 - frontMid[1]
+        const inwardLen = Math.hypot(inwardX, inwardZ) || 1
+        const setbackM = 58 * FT_TO_M
+        anchor.position.set(
+          frontMid[0] + (inwardX / inwardLen) * setbackM,
+          0,
+          frontMid[1] + (inwardZ / inwardLen) * setbackM
+        )
+        loadPlanHouse(
+          planId,
+          `${plan.name} on the lot — 3D massing with the real front elevation.`,
           true
         )
       }
@@ -858,6 +941,10 @@ export default function StudioCanvas({
       if (landscapeRef.current) {
         disposeObject3D(landscapeRef.current)
         landscapeRef.current = null
+      }
+      if (massingRef.current) {
+        disposeObject3D(massingRef.current)
+        massingRef.current = null
       }
       houseMat.map?.dispose()
       houseMat.dispose()

@@ -13,17 +13,18 @@ Default experience:
 1. Pick a lot from the plat (`?lot=46/3`, etc.)
 2. See **real aerial photography** of that homesite
 3. See the **lot boundary** (and neighbors) from the plat GeoJSON
-4. **Drop a builder plan** (primary) — Brownstone or Whitestone — as the
-   **photoreal marketing elevation cutout** (same look as the builder’s render),
-   scaled to the plan footprint on the lot
+4. **Drop a builder plan** (primary) — Brownstone or Whitestone — as a **3D
+   massing from the plan footprint**, with the **photoreal marketing elevation**
+   on the street face (background and plan name stripped from the render)
 5. **Driveway** auto-simulates from the street front to the garage apron, with
    a ballpark concrete/asphalt cost that updates as you move the house
 6. **Landscaping** mode places trees, evergreens, shrubs, and lawn patches
    (also tallied as a rough extras estimate)
 7. Or **upload a house photo** → background cutout → place/scale/rotate in feet
 
-Cutouts live in `public/plans/cutouts/`. Do **not** drape PDF line-art elevations
-onto box massings — that reads as a broken mash-up.
+Cutouts live in `public/plans/cutouts/`. Massings: `src/components/lotVisualizer/houses.ts`.
+Do **not** drape PDF line-art elevations onto boxes — use the photoreal render
+on the front face only.
 
 ## Builder plans
 

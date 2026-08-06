@@ -5,20 +5,30 @@ import { getPlan } from '../../data/plans'
 /**
  * Recognizable 3D massings for Blackstone plans.
  *
- * Volume comes from footprint + garage layout; street-side realism comes from
- * the builder elevation drawing draped on the front facade. Not a BIM model —
- * buyers should read scale, garage entry, and "that's the Whitestone."
+ * Volume comes from the construction-plan footprint + garage layout.
+ * In Lot Studio, the photoreal marketing elevation is applied on the street
+ * face so the home reads as the real render from the curb and as a solid
+ * volume when you orbit. Not a full BIM walk-around.
  *
  * Origin = footprint center at ground; front faces −z.
  */
 
 type GarageEntry = 'front' | 'side'
 
+export interface BuildHouseOptions {
+  /**
+   * When true, skip procedural porch/windows/garage-door boxes so a photoreal
+   * front facade can sit on the street face without fighting the massing.
+   */
+  facadeMode?: boolean
+}
+
 interface HouseSpec {
   widthFt: number
   depthFt: number
   wallM: number
   roofRiseM: number
+  /** Garage wing as seen from the street (camera looking toward +z). */
   garageWing: 'right' | 'left' | 'none'
   garageEntry: GarageEntry
   garageWidthFrac: number
@@ -38,7 +48,8 @@ const SPECS: Record<string, HouseSpec> = {
     depthFt: 72,
     wallM: 3.4,
     roofRiseM: 2.6,
-    garageWing: 'left',
+    // Marketing elevation: RV bay on the viewer's right
+    garageWing: 'right',
     garageEntry: 'front',
     garageWidthFrac: 0.4,
     garageHeightM: 4.6,
@@ -53,7 +64,7 @@ const SPECS: Record<string, HouseSpec> = {
     depthFt: 70,
     wallM: 3.2,
     roofRiseM: 2.9,
-    garageWing: 'left',
+    garageWing: 'right',
     garageEntry: 'front',
     garageWidthFrac: 0.42,
     garageHeightM: 4.6,
@@ -83,7 +94,7 @@ const SPECS: Record<string, HouseSpec> = {
     depthFt: 70,
     wallM: 3.2,
     roofRiseM: 2.9,
-    garageWing: 'left',
+    garageWing: 'right',
     garageEntry: 'front',
     garageWidthFrac: 0.42,
     garageHeightM: 4.6,
@@ -276,7 +287,8 @@ function resolveSpec(planId: string): HouseSpec {
   return SPECS[planId] ?? SPECS.brownstone
 }
 
-export function buildHouse(planId: string): THREE.Group {
+export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.Group {
+  const facadeMode = !!opts.facadeMode
   const spec = resolveSpec(planId)
   const W = spec.widthFt * FT_TO_M
   const D = spec.depthFt * FT_TO_M
@@ -299,7 +311,9 @@ export function buildHouse(planId: string): THREE.Group {
   house.userData.widthM = W
   house.userData.depthM = D
   house.userData.wallM = spec.wallM
+  house.userData.roofRiseM = spec.roofRiseM
   house.userData.garageHeightM = spec.garageHeightM
+  house.userData.facadeMode = facadeMode
 
   const garageW = W * spec.garageWidthFrac
   const mainW = W - garageW
@@ -338,97 +352,99 @@ export function buildHouse(planId: string): THREE.Group {
     garage.position.set(garageX, 0, -D * 0.02)
     house.add(garage)
 
-    if (spec.garageEntry === 'front') {
-      const rvW = garageW * 0.38
-      const dblW = garageW * 0.48
-      const doorH = spec.garageHeightM * 0.72
-      const rv = new THREE.Mesh(new THREE.BoxGeometry(rvW, doorH * 1.15, 0.14), doorMat)
-      const dbl = new THREE.Mesh(new THREE.BoxGeometry(dblW, doorH, 0.14), doorMat)
-      const gap = 0.25
-      const pairW = rvW + dblW + gap
-      const startX = garageX - pairW / 2
-      rv.position.set(startX + rvW / 2, doorH * 1.15 * 0.5, garageFrontZ - 0.08)
-      dbl.position.set(startX + rvW + gap + dblW / 2, doorH * 0.5, garageFrontZ - 0.08)
-      const rvPanel = new THREE.Mesh(
-        new THREE.PlaneGeometry(rvW * 0.9, doorH * 1.15 * 0.9),
-        solidMat(0x2e2a26, 0.9)
-      )
-      rvPanel.position.z = -0.08
-      rv.add(rvPanel)
-      const dblPanel = new THREE.Mesh(
-        new THREE.PlaneGeometry(dblW * 0.9, doorH * 0.9),
-        solidMat(0x2e2a26, 0.9)
-      )
-      dblPanel.position.z = -0.08
-      dbl.add(dblPanel)
-      house.add(rv, dbl)
-    } else {
-      const rvW = garageW * 0.55
-      const rvH = spec.garageHeightM * 0.82
-      const rv = new THREE.Mesh(new THREE.BoxGeometry(rvW, rvH, 0.14), doorMat)
-      rv.position.set(garageX, rvH * 0.5, garageFrontZ - 0.08)
-      house.add(rv)
+    // Procedural door boxes only when there is no photoreal facade in front
+    if (!facadeMode) {
+      if (spec.garageEntry === 'front') {
+        const rvW = garageW * 0.38
+        const dblW = garageW * 0.48
+        const doorH = spec.garageHeightM * 0.72
+        const rv = new THREE.Mesh(new THREE.BoxGeometry(rvW, doorH * 1.15, 0.14), doorMat)
+        const dbl = new THREE.Mesh(new THREE.BoxGeometry(dblW, doorH, 0.14), doorMat)
+        const gap = 0.25
+        const pairW = rvW + dblW + gap
+        const startX = garageX - pairW / 2
+        rv.position.set(startX + rvW / 2, doorH * 1.15 * 0.5, garageFrontZ - 0.08)
+        dbl.position.set(startX + rvW + gap + dblW / 2, doorH * 0.5, garageFrontZ - 0.08)
+        const rvPanel = new THREE.Mesh(
+          new THREE.PlaneGeometry(rvW * 0.9, doorH * 1.15 * 0.9),
+          solidMat(0x2e2a26, 0.9)
+        )
+        rvPanel.position.z = -0.08
+        rv.add(rvPanel)
+        const dblPanel = new THREE.Mesh(
+          new THREE.PlaneGeometry(dblW * 0.9, doorH * 0.9),
+          solidMat(0x2e2a26, 0.9)
+        )
+        dblPanel.position.z = -0.08
+        dbl.add(dblPanel)
+        house.add(rv, dbl)
+      } else {
+        const rvW = garageW * 0.55
+        const rvH = spec.garageHeightM * 0.82
+        const rv = new THREE.Mesh(new THREE.BoxGeometry(rvW, rvH, 0.14), doorMat)
+        rv.position.set(garageX, rvH * 0.5, garageFrontZ - 0.08)
+        house.add(rv)
 
-      const sideDoorW = garageDepth * 0.55
-      const sideDoorH = spec.garageHeightM * 0.62
-      const sideDoor = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, sideDoorH, sideDoorW),
-        doorMat
-      )
-      const sideX = garageOnLeft
-        ? garageX - garageW / 2 - 0.08
-        : garageX + garageW / 2 + 0.08
-      sideDoor.position.set(sideX, sideDoorH * 0.5, -D * 0.02)
-      house.add(sideDoor)
+        const sideDoorW = garageDepth * 0.55
+        const sideDoorH = spec.garageHeightM * 0.62
+        const sideDoor = new THREE.Mesh(
+          new THREE.BoxGeometry(0.14, sideDoorH, sideDoorW),
+          doorMat
+        )
+        const sideX = garageOnLeft
+          ? garageX - garageW / 2 - 0.08
+          : garageX + garageW / 2 + 0.08
+        sideDoor.position.set(sideX, sideDoorH * 0.5, -D * 0.02)
+        house.add(sideDoor)
+      }
     }
   }
 
-  // Front porch
-  const porchW = mainW * 0.48
-  const porch = new THREE.Group()
-  const slab = new THREE.Mesh(
-    new THREE.BoxGeometry(porchW, 0.18, spec.porchDepthM),
-    solidMat(0xb8b0a2, 0.9)
-  )
-  slab.position.y = 0.09
-  porch.add(slab)
-  const shedRoof = new THREE.Mesh(
-    new THREE.BoxGeometry(porchW + 0.2, 0.12, spec.porchDepthM + 0.15),
-    roof
-  )
-  shedRoof.position.y = spec.wallM * 0.9
-  shedRoof.rotation.x = -0.14
-  porch.add(shedRoof)
-  for (const px of [-porchW / 2 + 0.25, porchW / 2 - 0.25]) {
-    const post = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, spec.wallM * 0.86, 0.18),
-      trim
+  if (!facadeMode) {
+    // Front porch + fenestration (massing-only path / LotVisualizer)
+    const porchW = mainW * 0.48
+    const porch = new THREE.Group()
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(porchW, 0.18, spec.porchDepthM),
+      solidMat(0xb8b0a2, 0.9)
     )
-    post.position.set(px, (spec.wallM * 0.86) / 2, -spec.porchDepthM / 2 + 0.25)
-    porch.add(post)
-  }
-  porch.position.set(mainX, 0, -D * 0.44 - spec.porchDepthM / 2 + 0.2)
-  house.add(porch)
-
-  const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.35, 0.12), trim)
-  frontDoor.position.set(mainX, 1.18, -D * 0.44 - 0.05)
-  house.add(frontDoor)
-
-  const winGeo = new THREE.BoxGeometry(1.35, 1.55, 0.1)
-  const frontZ = -D * 0.46
-  const winXs = garageOnLeft
-    ? [mainX - mainW * 0.22, mainX + mainW * 0.18, mainX + mainW * 0.38]
-    : [mainX - mainW * 0.38, mainX - mainW * 0.18, mainX + mainW * 0.22]
-  for (const wx of winXs) {
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(1.5, 1.7, 0.08),
-      trim
+    slab.position.y = 0.09
+    porch.add(slab)
+    const shedRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(porchW + 0.2, 0.12, spec.porchDepthM + 0.15),
+      roof
     )
-    frame.position.set(wx, 1.75, frontZ)
-    house.add(frame)
-    const win = new THREE.Mesh(winGeo, glass)
-    win.position.set(wx, 1.75, frontZ - 0.04)
-    house.add(win)
+    shedRoof.position.y = spec.wallM * 0.9
+    shedRoof.rotation.x = -0.14
+    porch.add(shedRoof)
+    for (const px of [-porchW / 2 + 0.25, porchW / 2 - 0.25]) {
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, spec.wallM * 0.86, 0.18),
+        trim
+      )
+      post.position.set(px, (spec.wallM * 0.86) / 2, -spec.porchDepthM / 2 + 0.25)
+      porch.add(post)
+    }
+    porch.position.set(mainX, 0, -D * 0.44 - spec.porchDepthM / 2 + 0.2)
+    house.add(porch)
+
+    const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.35, 0.12), trim)
+    frontDoor.position.set(mainX, 1.18, -D * 0.44 - 0.05)
+    house.add(frontDoor)
+
+    const winGeo = new THREE.BoxGeometry(1.35, 1.55, 0.1)
+    const frontZ = -D * 0.46
+    const winXs = garageOnLeft
+      ? [mainX - mainW * 0.22, mainX + mainW * 0.18, mainX + mainW * 0.38]
+      : [mainX - mainW * 0.38, mainX - mainW * 0.18, mainX + mainW * 0.22]
+    for (const wx of winXs) {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.7, 0.08), trim)
+      frame.position.set(wx, 1.75, frontZ)
+      house.add(frame)
+      const win = new THREE.Mesh(winGeo, glass)
+      win.position.set(wx, 1.75, frontZ - 0.04)
+      house.add(win)
+    }
   }
 
   // Driveway apron attach point (local space)
@@ -440,7 +456,7 @@ export function buildHouse(planId: string): THREE.Group {
       : garageX + garageW / 2 + 1.2
     approach.position.set(sideX, 0, -D * 0.02)
   } else {
-    approach.position.set(garageX, 0, garageFrontZ - 1.0)
+    approach.position.set(garageX, 0, garageFrontZ - 0.35)
   }
   house.add(approach)
 
@@ -452,6 +468,66 @@ export function buildHouse(planId: string): THREE.Group {
   })
 
   return house
+}
+
+/**
+ * Studio house: plan footprint massing + photoreal street facade plane.
+ * From the curb you see the marketing elevation; orbiting reveals depth.
+ */
+export function buildStudioHouse(planId: string): THREE.Group {
+  const house = buildHouse(planId, { facadeMode: true })
+  const W = house.userData.widthM as number
+  const D = house.userData.depthM as number
+  const wallM = house.userData.wallM as number
+  const roofRiseM = house.userData.roofRiseM as number
+  const garageH = house.userData.garageHeightM as number
+
+  // Tall enough for the marketing elevation (garage peak + main roof)
+  const facadeH = Math.max(wallM + roofRiseM, garageH + roofRiseM * 0.85) * 1.05
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    alphaTest: 0.08,
+    depthWrite: true,
+    side: THREE.DoubleSide,
+  })
+  const facade = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
+  facade.name = 'streetFacade'
+  // Sit on the street face; scale.x = −1 undoes the Y-π mirror so the garage
+  // stays on the image-right (matching the 3D wing).
+  facade.position.set(0, facadeH / 2, -D / 2 - 0.12)
+  facade.rotation.y = Math.PI
+  facade.scale.set(-W * 1.02, facadeH, 1)
+  facade.renderOrder = 2
+  house.add(facade)
+  house.userData.facadeHeightM = facadeH
+
+  return house
+}
+
+/** Apply a cleaned photoreal cutout to the Studio street facade plane. */
+export function applyFacadeTexture(house: THREE.Group, tex: THREE.Texture): void {
+  const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
+  if (!facade) return
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  const mat = facade.material as THREE.MeshBasicMaterial
+  mat.map?.dispose()
+  mat.map = tex
+  mat.transparent = true
+  mat.alphaTest = 0.08
+  mat.needsUpdate = true
+  facade.visible = true
+
+  const img = tex.image as HTMLImageElement | undefined
+  if (img?.width && img.height) {
+    const W = house.userData.widthM as number
+    const aspect = img.width / img.height
+    const h = W / aspect
+    facade.scale.set(-(W * 1.02), h, 1)
+    facade.position.y = h / 2
+    house.userData.facadeHeightM = h
+  }
 }
 
 export function houseFootprint(planId: string): { wM: number; dM: number } {
