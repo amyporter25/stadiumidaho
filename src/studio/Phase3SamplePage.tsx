@@ -55,8 +55,11 @@ export default function Phase3SamplePage() {
           </h1>
         </div>
         <div style={{ display: 'flex', gap: 14, fontSize: 13 }}>
+          <Link to="/studio/earth" style={linkStyle}>
+            ← Neighborhood explorer
+          </Link>
           <Link to="/studio" style={linkStyle}>
-            ← Lot Studio (aerial + house)
+            Place a house
           </Link>
           <Link to="/" style={linkStyle}>
             Marketing site
@@ -184,12 +187,14 @@ export default function Phase3SamplePage() {
               fontSize: 13,
             }}
           >
-            Recommended next build: keep Lot Studio’s aerial + house placement, and add a{' '}
-            <strong>Phase 3 flyover mode</strong> driven by chaptered clips from this flight —
-            not a splat rebuild.
-            <div style={{ marginTop: 10 }}>
+            Neighborhood explorer is live: aerial + plat lines + fly/orbit (Google Earth–style).
+            This drone clip remains the cinematic flyover — not a splat rebuild.
+            <div style={{ marginTop: 10, display: 'flex', gap: 14 }}>
+              <Link to="/studio/earth" style={{ color: '#c4a574' }}>
+                Open neighborhood explorer →
+              </Link>
               <Link to="/studio?lot=46/3" style={{ color: '#c4a574' }}>
-                Open Lot Studio →
+                Place a house →
               </Link>
             </div>
           </div>

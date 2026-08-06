@@ -160,6 +160,9 @@ export default function LotStudioPage() {
               ))}
             </select>
           </label>
+          <Link to="/studio/earth" style={linkBtn}>
+            Neighborhood map
+          </Link>
           <Link to="/studio/sample" style={linkBtn}>
             Footage sample
           </Link>

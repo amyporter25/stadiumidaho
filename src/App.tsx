@@ -15,6 +15,7 @@ import FlyoverVideo from './components/FlyoverVideo'
 import StadiumSplat from './components/StadiumSplat'
 import LotStudioPage from './studio/LotStudioPage'
 import Phase3SamplePage from './studio/Phase3SamplePage'
+import NeighborhoodExplorer from './studio/NeighborhoodExplorer'
 
 function App() {
   const scrollRef = useRef({ y: 0, speed: 0 })
@@ -66,6 +67,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       {/* Track B — isolated lot visualization experience */}
       <Route path="/studio" element={<LotStudioPage />} />
+      <Route path="/studio/earth" element={<NeighborhoodExplorer />} />
       <Route path="/studio/sample" element={<Phase3SamplePage />} />
       <Route path="*" element={
         <>
