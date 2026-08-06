@@ -433,20 +433,26 @@ export function buildHouse(planId: string): THREE.Group {
 
   // Facade billboard — builder elevation drawing, slightly in front of the massing
   const facadeH = Math.max(spec.wallM, spec.garageHeightM) * 1.05 + spec.roofRiseM * 0.55
+  // PlaneGeometry faces +z by default; rotate so the textured face points
+  // toward the street (−z), where buyers look at the elevation.
   const facade = new THREE.Mesh(
     new THREE.PlaneGeometry(W * 0.98, facadeH),
     new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.75,
+      roughness: 0.72,
       metalness: 0.02,
       transparent: true,
       opacity: 0,
-      depthWrite: false,
-      side: THREE.FrontSide,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     })
   )
   facade.name = 'elevationFacade'
-  facade.position.set(0, facadeH * 0.48, -D * 0.5 - 0.12)
+  facade.rotation.y = Math.PI
+  facade.position.set(0, facadeH * 0.48, -D * 0.5 - 0.15)
   facade.visible = false
   house.add(facade)
 
