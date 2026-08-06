@@ -45,22 +45,9 @@ export function makeClearSky(radius = 2400): THREE.Mesh {
   const mesh = new THREE.Mesh(geo, mat)
   mesh.name = 'clearSky'
   mesh.frustumCulled = false
-
-  // Upgrade to drone-sampled sky when the asset is available.
-  new THREE.TextureLoader().load(
-    DRONE_SKY_URL,
-    (tex) => {
-      tex.colorSpace = THREE.SRGBColorSpace
-      tex.mapping = THREE.EquirectangularReflectionMapping
-      mat.map?.dispose()
-      mat.map = tex
-      mat.needsUpdate = true
-    },
-    undefined,
-    () => {
-      /* keep procedural sky */
-    }
-  )
+  // Keep the procedural clear-blue dome. (A photo crop from oblique drone
+  // frames stretched land into the sky and looked hazy/tan — don't use that.)
+  void DRONE_SKY_URL
 
   return mesh
 }
