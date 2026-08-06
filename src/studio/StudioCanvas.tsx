@@ -115,12 +115,37 @@ export default function StudioCanvas({
   const frontMidRef = useRef<[number, number]>([0, 0])
   const groundY = 0.05
   const controlsRef = useRef<OrbitControls | null>(null)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const widthRef = useRef(houseWidthFt)
   const yawRef = useRef(houseYawDeg)
   const texUrlRef = useRef<string | null>(null)
   const planIdRef = useRef<string | null>(null)
   const frameRef = useRef<LocalFrame | null>(null)
   const syncDrivewayRef = useRef<() => void>(() => {})
+
+  /** Pull the camera down to a street-level view of the house front.
+   * Photoreal cutouts only read correctly from this angle — from straight
+   * overhead they collapse to a thin edge. */
+  const frameHouseStreetView = () => {
+    const camera = cameraRef.current
+    const controls = controlsRef.current
+    const anchor = anchorRef.current
+    const cutout = cutoutRef.current
+    if (!camera || !controls || !anchor || !cutout?.visible) return
+
+    const yaw = anchor.rotation.y
+    // Stand in front of the facade (house front is −z in local space)
+    const dist = Math.max(28, cutout.scale.x * 0.85)
+    const eyeH = Math.max(4.5, cutout.scale.y * 0.42)
+    const lookY = cutout.scale.y * 0.35
+    camera.position.set(
+      anchor.position.x - Math.sin(yaw) * dist,
+      eyeH,
+      anchor.position.z - Math.cos(yaw) * dist
+    )
+    controls.target.set(anchor.position.x, lookY, anchor.position.z)
+    controls.update()
+  }
 
   modeRef.current = mode
   plantKindRef.current = plantKind
@@ -137,8 +162,18 @@ export default function StudioCanvas({
     if (cutout?.visible) {
       const w = widthRef.current * FT_TO_M
       const aspect = (cutout.userData.aspect as number) || 1.6
-      cutout.scale.set(w, w / aspect, 1)
-      cutout.position.y = groundY + cutout.scale.y / 2
+      const h = w / aspect
+      cutout.scale.set(w, h, 1)
+      cutout.position.y = groundY + h / 2
+
+      const pad = anchor.getObjectByName('footprintPad') as THREE.Mesh | undefined
+      if (pad) {
+        pad.visible = true
+        // Approximate footprint depth from plan catalog when available
+        const plan = planIdRef.current ? getPlan(planIdRef.current) : null
+        const depthFt = plan?.footprintFt.depth ?? widthRef.current * 0.7
+        pad.scale.set(w, depthFt * FT_TO_M, 1)
+      }
 
       // Garage apron target for the driveway (marketing renders put garage on the right;
       // side-entry plans aim toward the left wing).
@@ -146,7 +181,7 @@ export default function StudioCanvas({
       if (approach) {
         const plan = planIdRef.current ? getPlan(planIdRef.current) : null
         const side = plan?.garageEntry === 'side' ? -1 : 1
-        approach.position.set(side * w * 0.32, 0, -Math.max(1.2, cutout.scale.y * 0.08))
+        approach.position.set(side * w * 0.32, 0, -Math.max(1.2, h * 0.08))
       }
     }
 
@@ -162,38 +197,46 @@ export default function StudioCanvas({
     syncDrivewayRef.current()
   }
 
-  const loadCutoutTexture = (url: string, statusMsg: string) => {
+  const loadCutoutTexture = (url: string, statusMsg: string, frameView = false) => {
     const mesh = cutoutRef.current
     const anchor = anchorRef.current
     if (!mesh || !anchor) return
-    if (texUrlRef.current === url) {
+
+    const apply = (tex: THREE.Texture) => {
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.anisotropy = 8
+      const img = tex.image as HTMLImageElement
+      const aspect = img.width / Math.max(1, img.height)
+      mesh.userData.aspect = aspect
+      const mat = mesh.material as THREE.MeshBasicMaterial
+      mat.map?.dispose()
+      mat.map = tex
+      mat.color.set(0xffffff)
+      mat.transparent = true
+      mat.alphaTest = 0.12
+      mat.depthWrite = false
+      mat.side = THREE.DoubleSide
+      mat.needsUpdate = true
       mesh.visible = true
       anchor.visible = true
       syncTransform()
+      if (frameView) frameHouseStreetView()
+      onStatus(statusMsg)
+    }
+
+    if (texUrlRef.current === url && (mesh.material as THREE.MeshBasicMaterial).map) {
+      mesh.visible = true
+      anchor.visible = true
+      syncTransform()
+      if (frameView) frameHouseStreetView()
+      onStatus(statusMsg)
       return
     }
     texUrlRef.current = url
 
     new THREE.TextureLoader().load(
       url,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = 8
-        const img = tex.image as HTMLImageElement
-        const aspect = img.width / Math.max(1, img.height)
-        mesh.userData.aspect = aspect
-        const mat = mesh.material as THREE.MeshBasicMaterial
-        mat.map?.dispose()
-        mat.map = tex
-        mat.transparent = true
-        mat.alphaTest = 0.08
-        mat.depthWrite = false
-        mat.needsUpdate = true
-        mesh.visible = true
-        anchor.visible = true
-        syncTransform()
-        onStatus(statusMsg)
-      },
+      (tex) => apply(tex),
       undefined,
       () => onLoadError('Could not load the house image.')
     )
@@ -251,7 +294,8 @@ export default function StudioCanvas({
 
     loadCutoutTexture(
       plan.cutoutImg,
-      `${plan.name} on the lot — drag to move; driveway updates with placement.`
+      `${plan.name} on the lot — street view of the real elevation. Drag to move; driveway updates with placement.`,
+      true
     )
   }, [planId, houseImageUrl, onStatus, onYawSuggest, onDrivewayChange, onLoadError])
 
@@ -309,6 +353,7 @@ export default function StudioCanvas({
       0.35,
       4000
     )
+    cameraRef.current = camera
     const span = Math.max(maxX - minX, maxZ - minZ, 40)
     camera.position.set(span * 0.2, span * 0.45, span * 0.95)
 
@@ -433,15 +478,34 @@ export default function StudioCanvas({
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
+      alphaTest: 0.12,
     })
     const cutout = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), houseMat)
     cutout.visible = false
     cutout.position.set(0, 1, 0)
     // Face the street (−z): PlaneGeometry faces +z by default
     cutout.rotation.y = Math.PI
+    // Slight lean so the facade still peeks when glancing from above
+    cutout.rotation.x = -0.08
     anchor.add(cutout)
     cutoutRef.current = cutout
     texUrlRef.current = null
+
+    // Soft footprint pad under the cutout — readable from aerial before you orbit
+    const pad = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        color: 0x1a1c1e,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+      })
+    )
+    pad.rotation.x = -Math.PI / 2
+    pad.position.y = 0.06
+    pad.visible = false
+    pad.name = 'footprintPad'
+    anchor.add(pad)
 
     const approach = new THREE.Object3D()
     approach.name = 'garageApproach'
@@ -531,7 +595,8 @@ export default function StudioCanvas({
       if (plan?.cutoutImg) {
         loadCutoutTexture(
           plan.cutoutImg,
-          `${plan.name} on the lot — drag to move; driveway updates with placement.`
+          `${plan.name} on the lot — street view of the real elevation.`,
+          true
         )
       }
     }
@@ -718,6 +783,7 @@ export default function StudioCanvas({
       approachRef.current = null
       shadowRef.current = null
       drivewayRef.current = null
+      cameraRef.current = null
       planIdRef.current = null
       texUrlRef.current = null
       syncDrivewayRef.current = () => {}
