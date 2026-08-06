@@ -176,34 +176,19 @@ export default function StudioCanvas({
         pad.scale.set(w, depthFt * FT_TO_M, 1)
       }
 
-      // Driveway tip = garage door on the facade.
-      // Cutout mesh is rotated Y=π so the texture faces −z (street); that also
-      // mirrors +x, so image-right (garage) is at local −x in anchor space.
+      // Garage door marker on the facade.
+      // Cutout is rotated Y=π (faces street), which mirrors +x → image-right
+      // garage sits at local −x in anchor space.
       const approach = approachRef.current
       const plan = planIdRef.current ? getPlan(planIdRef.current) : null
       const garageFrac = plan?.garageXFrac ?? 0.35
       const garageX = -garageFrac * w
-      const apronDepth = Math.max(7, w * 0.16) // ~23–28 ft apron to the door
       if (approach) {
         if (plan?.garageEntry === 'side') {
-          // Side-entry: pull up beside the garage wing
-          approach.position.set(garageX - Math.sign(garageX || 1) * 0.5, 0, 0.2)
+          approach.position.set(garageX - Math.sign(garageX || 1) * 0.5, 0, 0.25)
         } else {
-          // Front garage: tip tucked just under/into the facade so ribbon meets the door
-          approach.position.set(garageX, 0, 0.6)
-        }
-      }
-      const apron = apronRef.current
-      if (apron) {
-        const apronW = Math.max(7.5, w * 0.26)
-        apron.visible = true
-        if (plan?.garageEntry === 'side') {
-          apron.scale.set(apronDepth, 1, apronW)
-          apron.position.set(garageX - Math.sign(garageX || 1) * (apronDepth / 2), 0.045, 0.15)
-        } else {
-          apron.scale.set(apronW, 1, apronDepth)
-          // Apron from street toward facade, overlapping the door so no grass gap
-          apron.position.set(garageX, 0.045, -apronDepth / 2 + 1.0)
+          // Flush with / slightly under the facade plane
+          approach.position.set(garageX, 0, 0.5)
         }
       }
     } else if (apronRef.current) {
@@ -545,11 +530,12 @@ export default function StudioCanvas({
       roughness: 0.95,
       metalness: 0.02,
     })
+    // Apron lives in scene space (aligned to driveway heading each frame)
     const apron = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), apronMat)
     apron.receiveShadow = true
     apron.visible = false
     apron.name = 'garageApron'
-    anchor.add(apron)
+    scene.add(apron)
     apronRef.current = apron
 
     const shadow = new THREE.Mesh(
@@ -585,7 +571,8 @@ export default function StudioCanvas({
     scene.add(landscapeRoot)
     landscapeRef.current = landscapeRoot
 
-    const worldApproach = new THREE.Vector3()
+    const worldDoor = new THREE.Vector3()
+    const worldApronOuter = new THREE.Vector3()
     const syncDriveway = () => {
       if (!drivewayRef.current || !anchorRef.current?.visible || !cutoutRef.current?.visible) {
         if (drivewayRef.current) drivewayRef.current.visible = false
@@ -593,38 +580,60 @@ export default function StudioCanvas({
         onDrivewayChange(null)
         return
       }
+
+      // World-space garage door (on the facade) — ribbon tip + apron end here
       const approach = approachRef.current
-      if (approach) {
-        approach.getWorldPosition(worldApproach)
-      } else {
-        worldApproach.set(anchor.position.x, 0, anchor.position.z)
-      }
+      if (approach) approach.getWorldPosition(worldDoor)
+      else worldDoor.set(anchor.position.x, 0, anchor.position.z)
 
       const [fx, fz] = frontMidRef.current
-      const dx = worldApproach.x - fx
-      const dz = worldApproach.z - fz
-      const len = Math.hypot(dx, dz)
+      let dx = worldDoor.x - fx
+      let dz = worldDoor.z - fz
+      let len = Math.hypot(dx, dz)
       if (len < 0.5) {
         driveway.visible = false
         if (apronRef.current) apronRef.current.visible = false
         onDrivewayChange(null)
         return
       }
+      const ux = dx / len
+      const uz = dz / len
 
-      // Driveway ribbon: street curb → garage door (runs the full length to the house)
+      // Push tip slightly past the facade so pavement reads under the garage door
+      const tipX = worldDoor.x + ux * 1.2
+      const tipZ = worldDoor.z + uz * 1.2
+      dx = tipX - fx
+      dz = tipZ - fz
+      len = Math.hypot(dx, dz)
+
       const widthM = 14 * FT_TO_M
       const isConcrete = materialRef.current === 'concrete'
+      const pave = isConcrete ? 0xb0aea8 : 0x4f4f51
+
+      // Continuous ribbon: curb → under garage door (no gap)
       driveway.visible = true
-      driveway.position.set((fx + worldApproach.x) / 2, 0.05, (fz + worldApproach.z) / 2)
+      driveway.position.set((fx + tipX) / 2, 0.055, (fz + tipZ) / 2)
       driveway.scale.set(widthM, 1, len)
       driveway.rotation.y = Math.atan2(dx, dz)
       asphaltMap.repeat.set(widthM / 2, Math.max(1, len / 2))
       asphaltMap.needsUpdate = true
-      drivewayMat.color.set(isConcrete ? 0xb0aea8 : 0xffffff)
+      drivewayMat.color.set(pave)
 
+      // Wider apron overlapping the last stretch of ribbon at the garage
       if (apronRef.current) {
-        const am = apronRef.current.material as THREE.MeshStandardMaterial
-        am.color.set(isConcrete ? 0xa8a69e : 0x5a5a5c)
+        const apronMesh = apronRef.current
+        const am = apronMesh.material as THREE.MeshStandardMaterial
+        am.color.set(pave)
+        const apronLen = Math.min(Math.max(8, len * 0.2), 14)
+        worldApronOuter.set(tipX - ux * apronLen, 0, tipZ - uz * apronLen)
+        apronMesh.visible = true
+        apronMesh.position.set(
+          (worldApronOuter.x + tipX) / 2,
+          0.06,
+          (worldApronOuter.z + tipZ) / 2
+        )
+        apronMesh.scale.set(widthM * 1.6, 1, apronLen)
+        apronMesh.rotation.set(0, Math.atan2(dx, dz), 0)
       }
 
       onDrivewayChange(estimateDriveway(len, materialRef.current))
