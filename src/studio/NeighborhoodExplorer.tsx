@@ -6,6 +6,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { makeFrame, ringToLocal } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
 import { useStadiumLots, type StadiumLotFeature } from '../components/LotMap'
+import { disposeSky, makeClearSky } from './sky'
 
 type Filter = 'plat2' | 'block3' | 'all'
 
@@ -70,8 +71,9 @@ export default function NeighborhoodExplorer() {
         maxLng = Math.max(maxLng, lng)
       }
     }
-    const padLat = (maxLat - minLat) * 0.12
-    const padLng = (maxLng - minLng) * 0.12
+    // Extra pad so zoomed-out views stay on imagery instead of empty haze rim
+    const padLat = (maxLat - minLat) * 0.28
+    const padLng = (maxLng - minLng) * 0.28
     minLat -= padLat
     maxLat += padLat
     minLng -= padLng
@@ -82,19 +84,23 @@ export default function NeighborhoodExplorer() {
     const frame = makeFrame(lat0, lng0)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x9eb6c8)
-    scene.fog = new THREE.Fog(0x9eb6c8, 400, 1400)
+    // No distance fog — that gray wash was reading as “hazy all around”
+    scene.fog = null
+    scene.background = new THREE.Color(0x6ea8e0)
 
     const camera = new THREE.PerspectiveCamera(
-      50,
+      55,
       mount.clientWidth / Math.max(1, mount.clientHeight),
-      1,
-      4000
+      0.5,
+      8000
     )
 
     renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.05
     mount.appendChild(renderer.domElement)
 
     labelRenderer = new CSS2DRenderer()
@@ -107,14 +113,20 @@ export default function NeighborhoodExplorer() {
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.06
-    controls.maxPolarAngle = Math.PI * 0.48
-    controls.minDistance = 40
+    // Allow near-horizon views so sky fills the frame (street / lot feel)
+    controls.maxPolarAngle = Math.PI * 0.495
+    controls.minDistance = 12
     controls.screenSpacePanning = true
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1))
-    const sun = new THREE.DirectionalLight(0xfff2e0, 0.7)
-    sun.position.set(80, 200, 40)
+    const sky = makeClearSky(5000)
+    scene.add(sky)
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95))
+    const sun = new THREE.DirectionalLight(0xfff2e0, 0.85)
+    sun.position.set(120, 220, 60)
     scene.add(sun)
+    const hemi = new THREE.HemisphereLight(0xb8d4f0, 0xc4b89a, 0.35)
+    scene.add(hemi)
 
     const [gx0, gz0] = frame.toLocal(minLat, minLng)
     const [gx1, gz1] = frame.toLocal(maxLat, maxLng)
@@ -142,6 +154,19 @@ export default function NeighborhoodExplorer() {
     const ground = new THREE.Mesh(groundGeo, groundMat)
     ground.position.set(groundCx, 0, groundCz)
     scene.add(ground)
+
+    // Soft dirt surround beyond the aerial tile so the site doesn’t end in a hard void
+    const surround = new THREE.Mesh(
+      new THREE.CircleGeometry(Math.max(groundW, groundD) * 1.8, 64),
+      new THREE.MeshStandardMaterial({
+        color: 0xb8a888,
+        roughness: 1,
+        side: THREE.DoubleSide,
+      })
+    )
+    surround.rotation.x = -Math.PI / 2
+    surround.position.set(groundCx, -0.4, groundCz)
+    scene.add(surround)
 
     type LotPick = { name: string; mesh: THREE.Mesh }
     const pickables: LotPick[] = []
@@ -214,11 +239,15 @@ export default function NeighborhoodExplorer() {
         uv.setXY(i, u, v)
       }
       uv.needsUpdate = true
+      aerial.texture.anisotropy = Math.min(16, renderer?.capabilities.getMaxAnisotropy() ?? 8)
+      aerial.texture.colorSpace = THREE.SRGBColorSpace
       groundMat.map = aerial.texture
       groundMat.color.set(0xffffff)
       groundMat.needsUpdate = true
       if (!disposed) {
-        setStatus('Drag to orbit · scroll to zoom · WASD to glide · click a lot')
+        setStatus(
+          'Drag to orbit · scroll toward the street · WASD to glide · tip camera to see the sky · click a lot'
+        )
       }
     })
 
@@ -319,6 +348,9 @@ export default function NeighborhoodExplorer() {
       renderer?.domElement.removeEventListener('pointermove', onMove)
       renderer?.domElement.removeEventListener('click', onClick)
       controls.dispose()
+      disposeSky(sky)
+      surround.geometry.dispose()
+      ;(surround.material as THREE.Material).dispose()
       groundGeo.dispose()
       groundMat.map?.dispose()
       groundMat.dispose()
@@ -340,7 +372,7 @@ export default function NeighborhoodExplorer() {
       style={{
         position: 'fixed',
         inset: 0,
-        background: '#9eb6c8',
+        background: '#6ea8e0',
         color: '#1a1c1e',
         fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
       }}

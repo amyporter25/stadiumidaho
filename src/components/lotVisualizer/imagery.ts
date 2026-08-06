@@ -69,7 +69,8 @@ export async function loadAerialTexture(bbox: BBox): Promise<AerialTexture | nul
     const y1 = latToTileY(bbox.south, z)
     const w = x1 - x0 + 1
     const h = y1 - y0 + 1
-    if (w * h > 100) continue
+    // Allow denser tiles for neighborhood / street-level sharpness (was 100)
+    if (w * h > 180) continue
 
     const canvas = document.createElement('canvas')
     canvas.width = w * TILE

@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { FT_TO_M, makeFrame, ringToLocal, type LocalFrame } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
 import type { StadiumLotFeature } from '../components/LotMap'
+import { disposeSky, makeClearSky } from './sky'
 
 export type StudioMode = 'look' | 'place'
 
@@ -123,25 +124,25 @@ export default function StudioCanvas({
       minZ = Math.min(minZ, z)
       maxZ = Math.max(maxZ, z)
     }
-    const pad = Math.max(maxX - minX, maxZ - minZ) * 0.55
+    const pad = Math.max(maxX - minX, maxZ - minZ) * 0.85
     const west = center.lng + (minX - pad) / frame.mPerDegLng
     const east = center.lng + (maxX + pad) / frame.mPerDegLng
     const south = center.lat - (maxZ + pad) / frame.mPerDegLat
     const north = center.lat - (minZ - pad) / frame.mPerDegLat
 
     const scene = new THREE.Scene()
-    // Soft sky — not black void, not synthetic neon
-    scene.background = new THREE.Color(0xb8c7d4)
-    scene.fog = new THREE.Fog(0xb8c7d4, 180, 520)
+    scene.fog = null
+    scene.background = new THREE.Color(0x6ea8e0)
 
     const camera = new THREE.PerspectiveCamera(
-      50,
+      55,
       mount.clientWidth / Math.max(1, mount.clientHeight),
-      0.5,
-      2000
+      0.35,
+      4000
     )
     const span = Math.max(maxX - minX, maxZ - minZ, 40)
-    camera.position.set(span * 0.15, span * 0.85, span * 1.05)
+    // Start a bit lower so sky reads at the horizon (drone street feel)
+    camera.position.set(span * 0.2, span * 0.45, span * 0.95)
 
     renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -149,21 +150,28 @@ export default function StudioCanvas({
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.05
     mount.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.target.set(0, 0, 0)
     controls.enableDamping = true
     controls.dampingFactor = 0.07
-    controls.maxPolarAngle = Math.PI * 0.48
-    controls.minDistance = 15
+    controls.maxPolarAngle = Math.PI * 0.495
+    controls.minDistance = 6
     controls.maxDistance = span * 4
     controlsRef.current = controls
 
+    const sky = makeClearSky(2800)
+    scene.add(sky)
+
     scene.add(new THREE.AmbientLight(0xffffff, 0.95))
-    const sun = new THREE.DirectionalLight(0xfff4e5, 0.85)
+    const sun = new THREE.DirectionalLight(0xfff4e5, 0.9)
     sun.position.set(40, 80, 20)
     scene.add(sun)
+    scene.add(new THREE.HemisphereLight(0xb8d4f0, 0xc4b89a, 0.35))
 
     // Ground plane in local meters covering the aerial bbox
     const [gx0, gz0] = frame.toLocal(south, west)
@@ -303,12 +311,14 @@ export default function StudioCanvas({
       }
       uv.needsUpdate = true
       void corners
+      aerial.texture.anisotropy = Math.min(16, renderer?.capabilities.getMaxAnisotropy() ?? 8)
+      aerial.texture.colorSpace = THREE.SRGBColorSpace
       groundMat.map = aerial.texture
       groundMat.color.set(0xffffff)
       groundMat.needsUpdate = true
       if (!disposed) {
         onStatus(
-          `Lot ${lot.properties.name} ready — orbit to look around, then upload a house photo.`
+          `Lot ${lot.properties.name} ready — tip the view toward the horizon for sky, or upload a house photo.`
         )
       }
     })
@@ -388,6 +398,7 @@ export default function StudioCanvas({
       renderer?.domElement.removeEventListener('pointercancel', onUp)
       controls.dispose()
       controlsRef.current = null
+      disposeSky(sky)
       groundGeo.dispose()
       groundMat.map?.dispose()
       groundMat.dispose()

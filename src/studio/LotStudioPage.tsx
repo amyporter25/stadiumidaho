@@ -238,7 +238,7 @@ export default function LotStudioPage() {
 const shell: CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: '#b8c7d4',
+  background: '#6ea8e0',
   color: '#1a1c1e',
   fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
   overflow: 'hidden',
