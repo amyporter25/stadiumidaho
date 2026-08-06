@@ -167,14 +167,10 @@ export default function StudioCanvas({
       cutout.scale.set(w, h, 1)
       cutout.position.y = groundY + h / 2
 
+      // Footprint pad stays hidden while a house is placed — the dark pad was
+      // reading as a “gap” between driveway and garage.
       const pad = anchor.getObjectByName('footprintPad') as THREE.Mesh | undefined
-      if (pad) {
-        pad.visible = true
-        // Approximate footprint depth from plan catalog when available
-        const plan = planIdRef.current ? getPlan(planIdRef.current) : null
-        const depthFt = plan?.footprintFt.depth ?? widthRef.current * 0.7
-        pad.scale.set(w, depthFt * FT_TO_M, 1)
-      }
+      if (pad) pad.visible = false
 
       // Garage door marker on the facade.
       // Cutout is rotated Y=π (faces street), which mirrors +x → image-right
@@ -599,40 +595,44 @@ export default function StudioCanvas({
       const ux = dx / len
       const uz = dz / len
 
-      // Push tip slightly past the facade so pavement reads under the garage door
-      const tipX = worldDoor.x + ux * 1.2
-      const tipZ = worldDoor.z + uz * 1.2
+      // Push tip well under the facade / garage door so pavement meets the house
+      const tipX = worldDoor.x + ux * 2.5
+      const tipZ = worldDoor.z + uz * 2.5
       dx = tipX - fx
       dz = tipZ - fz
       len = Math.hypot(dx, dz)
 
-      const widthM = 14 * FT_TO_M
+      const widthM = 16 * FT_TO_M
       const isConcrete = materialRef.current === 'concrete'
-      const pave = isConcrete ? 0xb0aea8 : 0x4f4f51
+      const pave = isConcrete ? 0xc4c2ba : 0x555558
 
       // Continuous ribbon: curb → under garage door (no gap)
       driveway.visible = true
-      driveway.position.set((fx + tipX) / 2, 0.055, (fz + tipZ) / 2)
+      driveway.position.set((fx + tipX) / 2, 0.09, (fz + tipZ) / 2)
       driveway.scale.set(widthM, 1, len)
       driveway.rotation.y = Math.atan2(dx, dz)
+      driveway.renderOrder = 2
       asphaltMap.repeat.set(widthM / 2, Math.max(1, len / 2))
       asphaltMap.needsUpdate = true
       drivewayMat.color.set(pave)
+      drivewayMat.depthWrite = true
 
-      // Wider apron overlapping the last stretch of ribbon at the garage
+      // Wider apron overlapping the last stretch — same pave color, no seam
       if (apronRef.current) {
         const apronMesh = apronRef.current
         const am = apronMesh.material as THREE.MeshStandardMaterial
         am.color.set(pave)
-        const apronLen = Math.min(Math.max(8, len * 0.2), 14)
+        am.depthWrite = true
+        const apronLen = Math.min(Math.max(10, len * 0.24), 16)
         worldApronOuter.set(tipX - ux * apronLen, 0, tipZ - uz * apronLen)
         apronMesh.visible = true
+        apronMesh.renderOrder = 3
         apronMesh.position.set(
           (worldApronOuter.x + tipX) / 2,
-          0.06,
+          0.1,
           (worldApronOuter.z + tipZ) / 2
         )
-        apronMesh.scale.set(widthM * 1.6, 1, apronLen)
+        apronMesh.scale.set(widthM * 1.75, 1, apronLen)
         apronMesh.rotation.set(0, Math.atan2(dx, dz), 0)
       }
 
