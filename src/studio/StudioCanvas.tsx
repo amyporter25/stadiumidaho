@@ -12,6 +12,7 @@ import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery
 import {
   applyFacadeTexture,
   buildStudioHouse,
+  updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
@@ -917,6 +918,11 @@ export default function StudioCanvas({
     const tick = () => {
       if (disposed) return
       controls.update()
+      // Photoreal facade faces the street; hide it when orbiting so the plan
+      // massing reads as solid 3D instead of a floating photo card.
+      if (massingRef.current?.visible) {
+        updateFacadeFacing(massingRef.current, camera)
+      }
       renderer!.render(scene, camera)
       raf = requestAnimationFrame(tick)
     }

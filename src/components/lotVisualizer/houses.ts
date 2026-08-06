@@ -487,18 +487,19 @@ export function buildStudioHouse(planId: string): THREE.Group {
   const mat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
-    alphaTest: 0.08,
+    alphaTest: 0.35,
     depthWrite: true,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
   })
   const facade = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
   facade.name = 'streetFacade'
-  // Sit on the street face; scale.x = −1 undoes the Y-π mirror so the garage
-  // stays on the image-right (matching the 3D wing).
-  facade.position.set(0, facadeH / 2, -D / 2 - 0.12)
+  // Flush with the street face; scale.x = −1 undoes the Y-π mirror so the
+  // garage stays on the image-right (matching the 3D wing).
+  facade.position.set(0, facadeH / 2, -D / 2 - 0.04)
   facade.rotation.y = Math.PI
-  facade.scale.set(-W * 1.02, facadeH, 1)
+  facade.scale.set(-W, facadeH, 1)
   facade.renderOrder = 2
+  facade.userData.isStreetFacade = true
   house.add(facade)
   house.userData.facadeHeightM = facadeH
 
@@ -511,23 +512,47 @@ export function applyFacadeTexture(house: THREE.Group, tex: THREE.Texture): void
   if (!facade) return
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 8
+  tex.premultiplyAlpha = false
   const mat = facade.material as THREE.MeshBasicMaterial
   mat.map?.dispose()
   mat.map = tex
   mat.transparent = true
-  mat.alphaTest = 0.08
+  // Binary cutouts — higher alphaTest kills fringe/sky leftovers
+  mat.alphaTest = 0.35
   mat.needsUpdate = true
   facade.visible = true
 
   const img = tex.image as HTMLImageElement | undefined
   if (img?.width && img.height) {
     const W = house.userData.widthM as number
+    const D = house.userData.depthM as number
     const aspect = img.width / img.height
     const h = W / aspect
-    facade.scale.set(-(W * 1.02), h, 1)
-    facade.position.y = h / 2
+    facade.scale.set(-W, h, 1)
+    facade.position.set(0, h / 2, -D / 2 - 0.04)
     house.userData.facadeHeightM = h
   }
+}
+
+/**
+ * Show the photoreal street facade only when the camera is looking at the
+ * front of the house — from the side/rear the plan massing reads as solid 3D
+ * without a floating photo card.
+ */
+export function updateFacadeFacing(house: THREE.Group, camera: THREE.Camera): void {
+  const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
+  if (!facade || !facade.userData.isStreetFacade) return
+  house.updateMatrixWorld(true)
+  const front = new THREE.Vector3(0, 0, -1).transformDirection(house.matrixWorld)
+  const toCam = new THREE.Vector3()
+    .subVectors(camera.position, house.getWorldPosition(new THREE.Vector3()))
+    .normalize()
+  // Fade out as you orbit past ~55° off the street axis
+  const facing = front.dot(toCam)
+  facade.visible = facing > 0.15
+  const mat = facade.material as THREE.MeshBasicMaterial
+  mat.opacity = facing > 0.45 ? 1 : Math.max(0, (facing - 0.15) / 0.3)
+  mat.transparent = true
 }
 
 export function houseFootprint(planId: string): { wM: number; dM: number } {
