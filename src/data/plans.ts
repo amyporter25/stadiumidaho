@@ -80,8 +80,9 @@ export const homePlans: HomePlan[] = [
     baths: '2.5 baths',
     garage: 'Tall RV bay + two-car garage (both front-facing, street-left)',
     garageEntry: 'front',
-    // Street-left garage wing (matches ArchyBase / builder front elevation)
+    // Street-left garage wing (matches builder front elevation / ArchyBase refs)
     garageXFrac: -0.28,
+    // Photoreal wraps: public/plans/refs/whitestone-front.png (+ rear)
     porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Modern farmhouse elevation with timber-truss entry',

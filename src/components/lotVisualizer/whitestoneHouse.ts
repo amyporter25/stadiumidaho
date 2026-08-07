@@ -416,6 +416,13 @@ export function buildWhitestoneHouse(): THREE.Group {
   pad.name = 'footprintPad'
   house.add(pad)
 
+  // Photoreal exterior skins — front/rear marketing images wrapped on the shell.
+  // Hidden until applyWhitestoneSkins() loads cleaned cutouts.
+  const skinH = garageH + roofRise * 0.85
+  house.userData.facadeHeightM = skinH
+  house.add(makeSkinPlane('streetFacade', W, skinH, -D / 2 - 0.1, true))
+  house.add(makeSkinPlane('rearFacade', W, skinH, D / 2 + 0.1, false))
+
   house.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
       o.castShadow = true
@@ -423,10 +430,85 @@ export function buildWhitestoneHouse(): THREE.Group {
     }
   })
 
-  // Peak height for camera framing
-  house.userData.facadeHeightM = garageH + roofRise * 0.75
-
   return house
+}
+
+function makeSkinPlane(
+  name: string,
+  widthM: number,
+  heightM: number,
+  z: number,
+  faceStreet: boolean
+): THREE.Mesh {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    alphaTest: 0.3,
+    depthWrite: true,
+    side: THREE.FrontSide,
+  })
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
+  mesh.name = name
+  mesh.userData.isStreetFacade = faceStreet
+  mesh.userData.isElevationSkin = true
+  mesh.visible = false
+  mesh.renderOrder = 3
+  // Street-facing plane uses Y=π + negative X scale so image-left stays left
+  if (faceStreet) {
+    mesh.rotation.y = Math.PI
+    mesh.scale.set(-widthM, heightM, 1)
+  } else {
+    mesh.scale.set(widthM, heightM, 1)
+  }
+  mesh.position.set(0, heightM / 2, z)
+  return mesh
+}
+
+/** Paths for Whitestone exterior wraps (cleaned cutouts preferred). */
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png'
+
+function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  tex.premultiplyAlpha = false
+  const mat = mesh.material as THREE.MeshBasicMaterial
+  mat.map?.dispose()
+  mat.map = tex
+  mat.transparent = true
+  mat.alphaTest = 0.3
+  mat.needsUpdate = true
+  mesh.visible = true
+
+  const img = tex.image as HTMLImageElement | undefined
+  if (img?.width && img.height) {
+    const h = widthM / (img.width / img.height)
+    const faceStreet = !!mesh.userData.isStreetFacade
+    mesh.scale.set(faceStreet ? -widthM : widthM, h, 1)
+    mesh.position.y = h / 2
+  }
+}
+
+/**
+ * Wrap the Whitestone shell with photoreal front/rear exteriors.
+ * Call after TextureLoader finishes both (rear optional).
+ */
+export function applyWhitestoneSkins(
+  house: THREE.Group,
+  front: THREE.Texture,
+  rear?: THREE.Texture | null
+): void {
+  const W = house.userData.widthM as number
+  const frontMesh = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
+  const rearMesh = house.getObjectByName('rearFacade') as THREE.Mesh | undefined
+  if (frontMesh) {
+    applySkinTexture(frontMesh, front, W)
+    house.userData.facadeHeightM = frontMesh.scale.y
+    house.userData.hasPhotorealSkins = true
+  }
+  if (rear && rearMesh) {
+    applySkinTexture(rearMesh, rear, W)
+  }
 }
 
 export const whitestoneFootprintFt = { width: W_FT, depth: D_FT }

@@ -14,6 +14,11 @@ import {
   buildStudioHouse,
   updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
+import {
+  applyWhitestoneSkins,
+  WHITESTONE_FRONT_SKIN,
+  WHITESTONE_REAR_SKIN,
+} from '../components/lotVisualizer/whitestoneHouse'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -261,8 +266,44 @@ export default function StudioCanvas({
     massingRef.current = house
     anchor.visible = true
 
+    const isWhitestone = planId === 'whitestone-front' || planId === 'whitestone'
+
+    // Whitestone: wrap photoreal front (+ rear) images onto the 3D shell
+    if (isWhitestone) {
+      texUrlRef.current = WHITESTONE_FRONT_SKIN
+      const loader = new THREE.TextureLoader()
+      const finish = () => {
+        syncTransform()
+        if (frameView) frameHouseStreetView()
+        onStatus(statusMsg)
+      }
+      loader.load(
+        WHITESTONE_FRONT_SKIN,
+        (frontTex) => {
+          loader.load(
+            WHITESTONE_REAR_SKIN,
+            (rearTex) => {
+              applyWhitestoneSkins(house, frontTex, rearTex)
+              finish()
+            },
+            undefined,
+            () => {
+              // Front-only is still a big upgrade over bare massing
+              applyWhitestoneSkins(house, frontTex, null)
+              finish()
+            }
+          )
+        },
+        undefined,
+        () => {
+          // Skins not uploaded yet — show the 3D massing alone
+          finish()
+        }
+      )
+      return
+    }
+
     const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
-    // Whitestone (and any plan without a facade plane) is pure 3D — no photo card
     if (!facade || !plan.cutoutImg) {
       texUrlRef.current = `massing:${planId}`
       syncTransform()
