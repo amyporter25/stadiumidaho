@@ -711,7 +711,6 @@ export default function StudioCanvas({
     landscapeRef.current = landscapeRoot
 
     const worldDoor = new THREE.Vector3()
-    const worldApronOuter = new THREE.Vector3()
     const syncDriveway = () => {
       const live =
         Boolean(anchorRef.current?.visible) &&
@@ -741,10 +740,11 @@ export default function StudioCanvas({
       const ux = dx / len
       const uz = dz / len
 
-      // Overshoot past the facade into the house mass so pave reads as going
-      // all the way under the garage door (billboard skins have no depth).
-      const tipX = worldDoor.x + ux * 12.0
-      const tipZ = worldDoor.z + uz * 12.0
+      // Tip sits at the garage face, with a short tuck under the threshold so
+      // pave reads flush — avoid deep overshoot / stacked aprons (z-fight).
+      const tuckM = 0.85
+      const tipX = worldDoor.x + ux * tuckM
+      const tipZ = worldDoor.z + uz * tuckM
       dx = tipX - fx
       dz = tipZ - fz
       len = Math.hypot(dx, dz)
@@ -760,12 +760,13 @@ export default function StudioCanvas({
         cm.color.set(isConcrete ? 0xb8b6ae : 0x3f3f43)
       }
 
-      // Continuous ribbon: curb → under garage door
+      // Single ribbon: curb → garage threshold (one height, no overlapping pad)
+      const paveY = 0.04
       driveway.visible = true
-      driveway.position.set((fx + tipX) / 2, 0.1, (fz + tipZ) / 2)
+      driveway.position.set((fx + tipX) / 2, paveY, (fz + tipZ) / 2)
       driveway.scale.set(widthM, 1, len)
       driveway.rotation.y = Math.atan2(dx, dz)
-      driveway.renderOrder = 2
+      driveway.renderOrder = 1
       if (isConcrete) {
         drivewayMat.map = null
         drivewayMat.color.set(pave)
@@ -777,27 +778,14 @@ export default function StudioCanvas({
       }
       drivewayMat.needsUpdate = true
       drivewayMat.depthWrite = true
+      drivewayMat.polygonOffset = true
+      drivewayMat.polygonOffsetFactor = -1
+      drivewayMat.polygonOffsetUnits = -1
 
-      // Wide garage apron — same color/height family as the ribbon so it reads
-      // as one continuous pad from approach through the garage threshold.
+      // Apron disabled — a second pad at nearly the same height caused the
+      // garbled / z-fighting edge at the house base.
       if (apronRef.current) {
-        const apronMesh = apronRef.current
-        const am = apronMesh.material as THREE.MeshStandardMaterial
-        am.color.set(pave)
-        am.depthWrite = true
-        am.map = null
-        am.needsUpdate = true
-        const apronLen = Math.min(Math.max(16, len * 0.45), 28)
-        worldApronOuter.set(tipX - ux * apronLen, 0, tipZ - uz * apronLen)
-        apronMesh.visible = true
-        apronMesh.renderOrder = 3
-        apronMesh.position.set(
-          (worldApronOuter.x + tipX) / 2,
-          0.105,
-          (worldApronOuter.z + tipZ) / 2
-        )
-        apronMesh.scale.set(widthM * 2.2, 1.2, apronLen)
-        apronMesh.rotation.set(0, Math.atan2(dx, dz), 0)
+        apronRef.current.visible = false
       }
 
       onDrivewayChange(estimateDriveway(len, materialRef.current))

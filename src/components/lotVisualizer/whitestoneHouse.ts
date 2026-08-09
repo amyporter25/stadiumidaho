@@ -2,179 +2,61 @@ import * as THREE from 'three'
 import { FT_TO_M } from './geo'
 
 /**
- * Whitestone exterior massing from the ArchyBase-style refs:
- * - Street front: tall RV bay + two-car garage on the LEFT, timber-truss entry,
- *   living wing with shutters on the right
- * - Rear: large glazed gable / window wall
+ * Whitestone Lot Studio massing — simple coherent volumes, not BIM detail.
  *
- * Origin = footprint center at ground; front faces −z (street).
- * Not a BIM model — readable modern-farmhouse volume for Lot Studio.
+ * Convention: origin = footprint center at ground; street facade faces −z.
+ * Front/rear marketing photos are mapped onto dedicated elevation faces
+ * (UV 0–1, ClampToEdge — no tiling/stretch beyond aspect fit).
  */
 
 const W_FT = 94
-const D_FT = 70
+const D_FT = 58
 
-function solid(color: number, roughness = 0.85): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.04 })
-}
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=mass1'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=mass1'
 
-function boardBattenMat(): THREE.MeshStandardMaterial {
-  const c = document.createElement('canvas')
-  c.width = 256
-  c.height = 256
-  const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#f2efe6'
-  ctx.fillRect(0, 0, 256, 256)
-  ctx.fillStyle = 'rgba(0,0,0,0.07)'
-  for (let x = 0; x < 256; x += 16) ctx.fillRect(x, 0, 2, 256)
-  ctx.fillStyle = 'rgba(255,255,255,0.05)'
-  for (let x = 3; x < 256; x += 16) ctx.fillRect(x, 0, 1, 256)
-  const map = new THREE.CanvasTexture(c)
-  map.wrapS = map.wrapT = THREE.RepeatWrapping
-  map.repeat.set(5, 3)
-  map.colorSpace = THREE.SRGBColorSpace
+const SIDING = 0xf2efe6
+const ROOF = 0x2a2a28
+
+function mat(color: number, roughness = 0.88): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
-    map,
-    color: 0xffffff,
-    roughness: 0.9,
-    metalness: 0.02,
-  })
-}
-
-function shingleMat(): THREE.MeshStandardMaterial {
-  const c = document.createElement('canvas')
-  c.width = 256
-  c.height = 256
-  const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#2a2a28'
-  ctx.fillRect(0, 0, 256, 256)
-  ctx.strokeStyle = 'rgba(0,0,0,0.22)'
-  ctx.lineWidth = 1
-  for (let y = 0; y < 256; y += 9) {
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(256, y)
-    ctx.stroke()
-    const off = (y / 9) % 2 === 0 ? 0 : 11
-    for (let x = off; x < 256; x += 22) {
-      ctx.beginPath()
-      ctx.moveTo(x, y)
-      ctx.lineTo(x, y + 9)
-      ctx.stroke()
-    }
-  }
-  const map = new THREE.CanvasTexture(c)
-  map.wrapS = map.wrapT = THREE.RepeatWrapping
-  map.repeat.set(7, 5)
-  map.colorSpace = THREE.SRGBColorSpace
-  return new THREE.MeshStandardMaterial({
-    map,
-    color: 0xffffff,
-    roughness: 0.96,
+    color,
+    roughness,
     metalness: 0.03,
+    side: THREE.FrontSide,
   })
 }
 
-/** Front-facing gable roof extruded along local Z (depth). */
-function gableAlongZ(
-  width: number,
-  depth: number,
-  wallH: number,
-  rise: number,
-  wall: THREE.Material,
-  roof: THREE.Material,
-  overhang = 0.4
-): THREE.Group {
-  const g = new THREE.Group()
-  const walls = new THREE.Mesh(new THREE.BoxGeometry(width, wallH, depth), wall)
-  walls.position.y = wallH / 2
-  g.add(walls)
-
-  const hw = width / 2 + overhang
+/** Simple gable roof prism (ridge along local X). */
+function gableRoof(width: number, depth: number, rise: number, material: THREE.Material): THREE.Mesh {
+  // Triangle extruded along X via Extrude along Z then rotate — keep it obvious.
   const shape = new THREE.Shape()
+  const hw = width / 2
   shape.moveTo(-hw, 0)
   shape.lineTo(hw, 0)
   shape.lineTo(0, rise)
   shape.closePath()
-  const roofGeo = new THREE.ExtrudeGeometry(shape, {
-    depth: depth + overhang * 2,
-    bevelEnabled: false,
-  })
-  roofGeo.translate(0, 0, -(depth + overhang * 2) / 2)
-  const roofMesh = new THREE.Mesh(roofGeo, roof)
-  roofMesh.position.y = wallH
-  g.add(roofMesh)
-  return g
-}
-
-/** Ridge running left–right (gable ends face ±x). */
-function gableAlongX(
-  width: number,
-  depth: number,
-  wallH: number,
-  rise: number,
-  wall: THREE.Material,
-  roof: THREE.Material,
-  overhang = 0.4
-): THREE.Group {
-  const g = gableAlongZ(depth, width, wallH, rise, wall, roof, overhang)
-  g.rotation.y = Math.PI / 2
-  return g
-}
-
-function addWindow(
-  parent: THREE.Object3D,
-  x: number,
-  y: number,
-  z: number,
-  w: number,
-  h: number,
-  withShutters: boolean,
-  glass: THREE.Material,
-  trim: THREE.Material,
-  shutter: THREE.Material
-) {
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.08), trim)
-  frame.position.set(x, y, z)
-  parent.add(frame)
-  const pane = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), glass)
-  pane.position.set(x, y, z - 0.04)
-  parent.add(pane)
-  if (withShutters) {
-    const sw = w * 0.28
-    for (const sx of [x - w / 2 - sw / 2 - 0.04, x + w / 2 + sw / 2 + 0.04]) {
-      const s = new THREE.Mesh(new THREE.BoxGeometry(sw, h * 0.95, 0.06), shutter)
-      s.position.set(sx, y, z - 0.01)
-      parent.add(s)
-    }
-  }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false })
+  // Center on XZ: extrude goes +Z from 0
+  geo.translate(0, 0, -depth / 2)
+  const mesh = new THREE.Mesh(geo, material)
+  // Shape is in XY; we want ridge along X spanning depth in Z — already correct
+  return mesh
 }
 
 /**
- * Build the Whitestone as a recognizable modern-farmhouse exterior.
+ * Build a solid, orbit-stable Whitestone massing.
+ * Front (−z) and rear (+z) elevation meshes receive the photos later.
  */
 export function buildWhitestoneHouse(): THREE.Group {
   const W = W_FT * FT_TO_M
   const D = D_FT * FT_TO_M
-  const wallH = 3.15
-  const roofRise = 2.85
-  const garageH = 4.55
+  const wallH = 3.2
+  const garageH = 4.4
+  const roofRise = 2.4
 
-  const siding = boardBattenMat()
-  const roof = shingleMat()
-  const wood = solid(0xb08a5a, 0.7)
-  const trim = solid(0x1a1a1a, 0.75)
-  const doorWhite = solid(0xeceae4, 0.8)
-  const doorBlack = solid(0x1c1c1c, 0.65)
-  const glass = new THREE.MeshStandardMaterial({
-    color: 0x6a8496,
-    roughness: 0.12,
-    metalness: 0.55,
-    transparent: true,
-    opacity: 0.82,
-  })
-  const shutter = solid(0x1a1a1a, 0.85)
-  const concrete = solid(0xb8b6ae, 0.95)
+  const roofMat = mat(ROOF, 0.95)
+  const sideMat = mat(SIDING, 0.9)
 
   const house = new THREE.Group()
   house.name = 'house-whitestone'
@@ -186,244 +68,79 @@ export function buildWhitestoneHouse(): THREE.Group {
   house.userData.garageHeightM = garageH
   house.userData.facadeMode = true
 
-  // --- Wing widths (street view, left → right) ---
-  const garageW = W * 0.42
-  const entryW = W * 0.22
-  const livingW = W - garageW - entryW
+  // --- Proportions (street left → right): garage | living ---
+  const garageW = W * 0.4
+  const livingW = W - garageW
   const garageX = -W / 2 + garageW / 2
-  const entryX = -W / 2 + garageW + entryW / 2
   const livingX = W / 2 - livingW / 2
 
-  // Main living / bedroom mass (ridge left–right)
-  const mainDepth = D * 0.9
-  const main = gableAlongX(livingW + entryW * 0.35, mainDepth, wallH, roofRise, siding, roof)
-  main.position.set((entryX + livingX) / 2 + livingW * 0.08, 0, D * 0.02)
-  house.add(main)
+  // Garage sits slightly proud toward the street so the mass reads in orbit
+  const garageDepth = D * 0.92
+  const livingDepth = D
+  const garageZ = -D / 2 + garageDepth / 2 + 0.15
+  const livingZ = 0
 
-  // Garage + RV wing (front-facing gables) — LEFT of street elevation
-  const garageDepth = D * 0.78
-  const garageFrontZ = -D * 0.02 - garageDepth / 2
-
-  const rvW = garageW * 0.38
-  const dblW = garageW * 0.52
-  const rvX = garageX - garageW / 2 + rvW / 2 + 0.15
-  const dblX = garageX + garageW / 2 - dblW / 2 - 0.1
-
-  const rvBay = gableAlongZ(rvW + 0.6, garageDepth, garageH, roofRise * 0.75, siding, roof, 0.3)
-  rvBay.position.set(rvX, 0, -D * 0.02)
-  house.add(rvBay)
-
-  const dblBay = gableAlongZ(dblW + 0.5, garageDepth * 0.92, wallH + 0.15, roofRise * 0.7, siding, roof, 0.28)
-  dblBay.position.set(dblX, 0, -D * 0.01)
-  house.add(dblBay)
-
-  // Garage doors (white paneled)
-  const rvDoorH = garageH * 0.78
-  const rvDoor = new THREE.Mesh(new THREE.BoxGeometry(rvW * 0.88, rvDoorH, 0.12), doorWhite)
-  rvDoor.position.set(rvX, rvDoorH / 2, garageFrontZ - 0.06)
-  house.add(rvDoor)
-  for (let i = 1; i < 5; i++) {
-    const groove = new THREE.Mesh(
-      new THREE.BoxGeometry(rvW * 0.82, 0.03, 0.02),
-      solid(0xd0cec6, 0.9)
-    )
-    groove.position.set(rvX, (rvDoorH * i) / 5, garageFrontZ - 0.13)
-    house.add(groove)
-  }
-
-  const dblDoorH = wallH * 0.72
-  const dblDoor = new THREE.Mesh(new THREE.BoxGeometry(dblW * 0.9, dblDoorH, 0.12), doorWhite)
-  dblDoor.position.set(dblX, dblDoorH / 2, garageFrontZ + 0.35)
-  house.add(dblDoor)
-  for (let i = 1; i < 4; i++) {
-    const groove = new THREE.Mesh(
-      new THREE.BoxGeometry(dblW * 0.84, 0.03, 0.02),
-      solid(0xd0cec6, 0.9)
-    )
-    groove.position.set(dblX, (dblDoorH * i) / 4, garageFrontZ + 0.28)
-    house.add(groove)
-  }
-
-  // Small gable window above double garage
-  addWindow(
-    house,
-    dblX,
-    wallH + roofRise * 0.28,
-    garageFrontZ + 0.4,
-    0.55,
-    1.1,
-    false,
-    glass,
-    trim,
-    shutter
+  // Living / bedroom volume — one solid box (no orphan window chunks)
+  const living = new THREE.Mesh(
+    new THREE.BoxGeometry(livingW, wallH, livingDepth),
+    sideMat
   )
+  living.name = 'massLiving'
+  living.position.set(livingX, wallH / 2, livingZ)
+  house.add(living)
 
-  // --- Timber-truss entry porch (center) ---
-  const porchDepth = 3.2
-  const porchZ = -D * 0.42 - porchDepth / 2
-  const porchSlab = new THREE.Mesh(
-    new THREE.BoxGeometry(entryW * 0.92, 0.16, porchDepth),
-    concrete
+  // Garage / RV volume — taller, left, joined to living
+  const garage = new THREE.Mesh(
+    new THREE.BoxGeometry(garageW, garageH, garageDepth),
+    sideMat
   )
-  porchSlab.position.set(entryX, 0.08, porchZ)
-  house.add(porchSlab)
+  garage.name = 'massGarage'
+  garage.position.set(garageX, garageH / 2, garageZ)
+  house.add(garage)
 
-  const postH = wallH * 0.92
-  for (const px of [entryX - entryW * 0.32, entryX + entryW * 0.32]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.28, postH, 0.28), wood)
-    post.position.set(px, postH / 2, porchZ - porchDepth / 2 + 0.35)
-    house.add(post)
-  }
-  // Gable truss over entry
-  const entryGable = gableAlongZ(entryW * 0.85, porchDepth * 0.55, wallH * 1.02, roofRise * 0.55, siding, roof, 0.2)
-  entryGable.position.set(entryX, 0, porchZ - 0.2)
-  house.add(entryGable)
-  // Timber beams under gable
-  const beam = new THREE.Mesh(new THREE.BoxGeometry(entryW * 0.7, 0.16, 0.2), wood)
-  beam.position.set(entryX, wallH * 0.88, porchZ - porchDepth / 2 + 0.5)
-  house.add(beam)
-  const braceL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), wood)
-  braceL.position.set(entryX - entryW * 0.18, wallH * 0.55, porchZ - porchDepth / 2 + 0.5)
-  braceL.rotation.z = 0.55
-  house.add(braceL)
-  const braceR = braceL.clone()
-  braceR.position.x = entryX + entryW * 0.18
-  braceR.rotation.z = -0.55
-  house.add(braceR)
+  // Roofs — simple closed gable prisms (no open faces / orphan chunks).
+  // gableRoof builds ridge along Z; yaw 90° → ridge along X, gables face ±Z.
+  const livingRoof = gableRoof(livingDepth + 0.5, livingW + 0.5, roofRise, roofMat)
+  livingRoof.rotation.y = Math.PI / 2
+  livingRoof.name = 'roofLiving'
+  livingRoof.position.set(livingX, wallH, livingZ)
+  house.add(livingRoof)
 
-  // Black double front doors
-  const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.4, 0.12), doorBlack)
-  frontDoor.position.set(entryX, 1.28, -D * 0.42 - 0.02)
-  house.add(frontDoor)
-  const doorGlassL = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 1.8), glass)
-  doorGlassL.position.set(entryX - 0.38, 1.35, -D * 0.42 - 0.09)
-  house.add(doorGlassL)
-  const doorGlassR = doorGlassL.clone()
-  doorGlassR.position.x = entryX + 0.38
-  house.add(doorGlassR)
+  // Garage: street-facing gable (same yaw) on the taller volume
+  const garageRoof = gableRoof(garageDepth + 0.35, garageW + 0.35, roofRise * 0.75, roofMat)
+  garageRoof.rotation.y = Math.PI / 2
+  garageRoof.name = 'roofGarage'
+  garageRoof.position.set(garageX, garageH, garageZ)
+  house.add(garageRoof)
 
-  // Living-wing front windows
-  const livingFrontZ = -D * 0.46
-  addWindow(house, livingX - livingW * 0.22, 1.7, livingFrontZ, 1.1, 1.7, false, glass, trim, shutter)
-  addWindow(house, livingX + livingW * 0.18, 1.7, livingFrontZ, 2.0, 1.55, true, glass, trim, shutter)
+  // Elevation face height covers garage peak for a full photo fit
+  const elevH = garageH + roofRise * 0.55
+  house.userData.facadeHeightM = elevH
 
-  // Gooseneck-style lights (simple cylinders)
-  for (const lx of [rvX, dblX, entryX - 0.9, entryX + 0.9]) {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.45, 8), trim)
-    arm.rotation.z = Math.PI / 2
-    arm.position.set(lx, wallH * 0.95, livingFrontZ - 0.15)
-    house.add(arm)
-  }
+  // Front elevation face — flush with street face of the garage mass (−z)
+  const frontFace = makeElevationFace('streetFacade', W, elevH, true)
+  frontFace.position.set(0, elevH / 2, -D / 2)
+  house.add(frontFace)
 
-  // --- Rear elevation: large glazed gable (reads from orbit) ---
-  const rearZ = D * 0.42
-  const rearCenterX = entryX + entryW * 0.1
-  const rearGableW = (livingW + entryW) * 0.62
-  const rearGable = gableAlongZ(
-    rearGableW,
-    D * 0.28,
-    wallH * 1.08,
-    roofRise * 0.95,
-    siding,
-    roof,
-    0.28
-  )
-  rearGable.position.set(rearCenterX, 0, rearZ)
-  house.add(rearGable)
+  // Rear elevation face — flush with rear of the living mass (+z)
+  const rearFace = makeElevationFace('rearFacade', W, elevH, false)
+  rearFace.position.set(0, elevH / 2, D / 2)
+  house.add(rearFace)
 
-  // Window wall (grid) — pushed to the rear face so it reads clearly
-  const wallGlassW = rearGableW * 0.78
-  const wallGlassH = wallH * 0.95
-  const rearFaceZ = rearZ + D * 0.14
-  const cols = 3
-  const rows = 2
-  const cellW = wallGlassW / cols
-  const cellH = wallGlassH / rows
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const gx = rearCenterX + (c - 1) * cellW
-      const gy = 0.4 + cellH / 2 + r * cellH
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(cellW * 0.96, cellH * 0.96, 0.08),
-        trim
-      )
-      frame.position.set(gx, gy, rearFaceZ)
-      house.add(frame)
-      const pane = new THREE.Mesh(new THREE.BoxGeometry(cellW * 0.86, cellH * 0.86, 0.06), glass)
-      pane.position.set(gx, gy, rearFaceZ + 0.06)
-      house.add(pane)
-    }
-  }
-  // Triangular gable glass
-  const peakGlass = new THREE.Mesh(new THREE.BoxGeometry(wallGlassW * 0.55, 1.7, 0.08), glass)
-  peakGlass.position.set(rearCenterX, wallH + 1.05, rearFaceZ + 0.06)
-  house.add(peakGlass)
-  const peakFrame = new THREE.Mesh(new THREE.BoxGeometry(wallGlassW * 0.62, 1.85, 0.06), trim)
-  peakFrame.position.set(rearCenterX, wallH + 1.05, rearFaceZ)
-  house.add(peakFrame)
-
-  // Rear side windows
-  addWindow(
-    house,
-    livingX + livingW * 0.22,
-    1.65,
-    rearFaceZ - 0.15,
-    1.8,
-    1.45,
-    false,
-    glass,
-    trim,
-    shutter
-  )
-  addWindow(
-    house,
-    garageX + garageW * 0.2,
-    1.65,
-    rearZ + D * 0.02,
-    1.6,
-    1.45,
-    false,
-    glass,
-    trim,
-    shutter
-  )
-
-  // Wood columns flanking rear glass
-  for (const px of [rearCenterX - wallGlassW / 2 - 0.25, rearCenterX + wallGlassW / 2 + 0.25]) {
-    const col = new THREE.Mesh(new THREE.BoxGeometry(0.32, wallH * 0.95, 0.32), wood)
-    col.position.set(px, wallH * 0.48, rearFaceZ - 0.05)
-    house.add(col)
-  }
-
-  // Driveway tip — center of the two front garage doors (left wing).
-  // Sit at the street skin plane so pave meets the photoreal garage doors
-  // (massing garage face is slightly recessed behind that plane).
+  // Driveway tip — center of left garage wing, exactly on the street face
   const approach = new THREE.Object3D()
   approach.name = 'garageApproach'
-  approach.position.set((rvX + dblX) / 2, 0, -D / 2 - 0.55)
+  approach.position.set(garageX, 0, -D / 2)
   house.add(approach)
 
-  // Soft contact pad under footprint
-  const pad = new THREE.Mesh(
-    new THREE.PlaneGeometry(W * 1.02, D * 1.02),
-    new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0.08,
-      depthWrite: false,
-    })
+  // Thin threshold slab under the garage doors — driveway meets this flush
+  const threshold = new THREE.Mesh(
+    new THREE.BoxGeometry(garageW * 0.95, 0.06, 0.9),
+    mat(0xc8c6be, 0.95)
   )
-  pad.rotation.x = -Math.PI / 2
-  pad.position.y = 0.02
-  pad.name = 'footprintPad'
-  house.add(pad)
-
-  // Photoreal exterior skins — front/rear marketing images wrapped on the shell.
-  // Hidden until applyWhitestoneSkins() loads cleaned cutouts.
-  const skinH = garageH + roofRise * 0.85
-  house.userData.facadeHeightM = skinH
-  house.add(makeSkinPlane('streetFacade', W, skinH, -D / 2 - 0.1, true))
-  house.add(makeSkinPlane('rearFacade', W, skinH, D / 2 + 0.1, false))
+  threshold.name = 'garageThreshold'
+  threshold.position.set(garageX, 0.03, -D / 2 - 0.35)
+  house.add(threshold)
 
   house.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
@@ -435,82 +152,54 @@ export function buildWhitestoneHouse(): THREE.Group {
   return house
 }
 
-function makeSkinPlane(
+/**
+ * Dedicated elevation quad. Starts neutral; applyWhitestoneSkins() swaps in
+ * the photo with ClampToEdge UVs so it never tiles.
+ */
+function makeElevationFace(
   name: string,
   widthM: number,
   heightM: number,
-  z: number,
   faceStreet: boolean
 ): THREE.Mesh {
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    alphaTest: 0.3,
-    depthWrite: true,
+  const geo = new THREE.PlaneGeometry(1, 1)
+  // PlaneGeometry faces +z by default. Street needs to face −z.
+  const mat = new THREE.MeshStandardMaterial({
+    color: SIDING,
+    roughness: 0.9,
+    metalness: 0.02,
     side: THREE.FrontSide,
   })
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
+  const mesh = new THREE.Mesh(geo, mat)
   mesh.name = name
   mesh.userData.isStreetFacade = faceStreet
   mesh.userData.isElevationSkin = true
-  mesh.visible = false
-  mesh.renderOrder = 3
-  // Face −z (street). Texture U=0 is image-left; after Y=π that lands on
-  // world −X (house left) without an extra X flip — matches left-RV refs.
+  mesh.scale.set(widthM, heightM, 1)
   if (faceStreet) {
     mesh.rotation.y = Math.PI
-    mesh.scale.set(widthM, heightM, 1)
-  } else {
-    mesh.scale.set(widthM, heightM, 1)
   }
-  mesh.position.set(0, heightM / 2, z)
   return mesh
 }
 
-/** Paths for Whitestone exterior wraps (cleaned cutouts preferred). */
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy4'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy4'
-
-function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
+function configureElevationTexture(tex: THREE.Texture): void {
   tex.colorSpace = THREE.SRGBColorSpace
-  tex.anisotropy = 8
-  tex.premultiplyAlpha = false
-  // Ensure image-left stays house-left on the street plane (no mirror).
   tex.wrapS = THREE.ClampToEdgeWrapping
   tex.wrapT = THREE.ClampToEdgeWrapping
   tex.repeat.set(1, 1)
   tex.offset.set(0, 0)
   tex.center.set(0.5, 0.5)
   tex.rotation = 0
+  tex.anisotropy = 8
   tex.generateMipmaps = true
   tex.minFilter = THREE.LinearMipmapLinearFilter
   tex.magFilter = THREE.LinearFilter
-  const mat = mesh.material as THREE.MeshBasicMaterial
-  mat.map?.dispose()
-  mat.map = tex
-  // High alphaTest kills soft fringe so the foundation reads as a clean line
-  // against the driveway (no jagged rembg halo).
-  mat.transparent = true
-  mat.alphaTest = 0.55
-  mat.depthWrite = true
-  mat.needsUpdate = true
-  mesh.visible = true
-  mesh.renderOrder = 5
-
-  const img = tex.image as HTMLImageElement | undefined
-  if (img?.width && img.height) {
-    const h = widthM / (img.width / img.height)
-    const faceStreet = !!mesh.userData.isStreetFacade
-    mesh.scale.set(widthM, h, 1)
-    if (faceStreet) mesh.rotation.y = Math.PI
-    // Sit the elevation on the ground plane — bottom texel row = foundation
-    mesh.position.y = h / 2
-  }
+  tex.needsUpdate = true
 }
 
 /**
- * Wrap the Whitestone shell with photoreal front/rear exteriors.
- * Call after TextureLoader finishes both (rear optional).
+ * Project front/rear photos onto the elevation faces.
+ * Aspect-correct: width locks to house width; height follows photo aspect
+ * so the image is not stretched. Face bottom stays on the ground plane.
  */
 export function applyWhitestoneSkins(
   house: THREE.Group,
@@ -518,86 +207,33 @@ export function applyWhitestoneSkins(
   rear?: THREE.Texture | null
 ): void {
   const W = house.userData.widthM as number
-  const D = house.userData.depthM as number
-  const frontMesh = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
-  const rearMesh = house.getObjectByName('rearFacade') as THREE.Mesh | undefined
-  if (frontMesh) {
-    // Sit just ahead of the furthest street-facing mass so porch boxes
-    // cannot poke through the photoreal elevation.
-    frontMesh.position.z = -D / 2 - 0.55
-    applySkinTexture(frontMesh, front, W)
-    house.userData.facadeHeightM = frontMesh.scale.y
-    house.userData.hasPhotorealSkins = true
-    hideStreetOccluders(house)
+
+  const apply = (mesh: THREE.Mesh | undefined, tex: THREE.Texture | null | undefined) => {
+    if (!mesh || !tex) return
+    configureElevationTexture(tex)
+    const m = mesh.material as THREE.MeshStandardMaterial
+    m.map?.dispose()
+    m.map = tex
+    m.color.set(0xffffff)
+    m.transparent = true
+    // Hard cut — no soft halo / fringe at the foundation
+    m.alphaTest = 0.5
+    m.depthWrite = true
+    m.needsUpdate = true
+
+    const img = tex.image as { width?: number; height?: number } | undefined
+    if (img?.width && img.height) {
+      const h = W / (img.width / img.height)
+      mesh.scale.set(W, h, 1)
+      mesh.position.y = h / 2
+      house.userData.facadeHeightM = h
+    }
+    mesh.visible = true
   }
-  if (rear && rearMesh) {
-    // Keep rear skin ahead of all rear massing so windows/gables cannot
-    // z-fight through the photoreal elevation (looks "garbled").
-    rearMesh.position.z = D / 2 + 0.75
-    applySkinTexture(rearMesh, rear, W)
-    hideRearOccluders(house)
-  }
-}
 
-/**
- * Hide street-side massing that would poke through / sit in front of the
- * photoreal skin (porch volumes, doors, windows). Uses world Z so nested
- * meshes inside gable groups are included.
- */
-function hideStreetOccluders(house: THREE.Group): void {
-  house.updateMatrixWorld(true)
-  const origin = new THREE.Vector3()
-  house.getWorldPosition(origin)
-  const q = new THREE.Quaternion()
-  house.getWorldQuaternion(q)
-  const inv = q.clone().invert()
-  const tmp = new THREE.Vector3()
-  // Anything whose center sits in the front third is an occluder risk
-  const frontLimit = -(house.userData.depthM as number) * 0.12
-
-  house.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh) return
-    if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
-    o.getWorldPosition(tmp)
-    // House-local Z: more negative = closer to street
-    const local = tmp.clone().sub(origin).applyQuaternion(inv)
-    if (local.z > frontLimit) return
-    const geo = (o as THREE.Mesh).geometry
-    if (!geo.boundingBox) geo.computeBoundingBox()
-    const bb = geo.boundingBox
-    if (!bb) return
-    const depth = bb.max.z - bb.min.z
-    // Keep only deep primary wing volumes; hide porch/entry/door/window chunks
-    if (depth < 6.5) o.visible = false
-  })
-}
-
-function hideRearOccluders(house: THREE.Group): void {
-  house.updateMatrixWorld(true)
-  const origin = new THREE.Vector3()
-  house.getWorldPosition(origin)
-  const q = new THREE.Quaternion()
-  house.getWorldQuaternion(q)
-  const inv = q.clone().invert()
-  const tmp = new THREE.Vector3()
-  // Hide anything whose center sits in the rear third — the skin carries
-  // the glass-gable elevation (and must not show ArchyBase leftovers on
-  // nested window/door meshes).
-  const rearLimit = (house.userData.depthM as number) * 0.1
-
-  house.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh) return
-    if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
-    o.getWorldPosition(tmp)
-    const local = tmp.clone().sub(origin).applyQuaternion(inv)
-    if (local.z < rearLimit) return
-    const geo = (o as THREE.Mesh).geometry
-    if (!geo.boundingBox) geo.computeBoundingBox()
-    const bb = geo.boundingBox
-    if (!bb) return
-    const depth = bb.max.z - bb.min.z
-    if (depth < 8) o.visible = false
-  })
+  apply(house.getObjectByName('streetFacade') as THREE.Mesh | undefined, front)
+  apply(house.getObjectByName('rearFacade') as THREE.Mesh | undefined, rear ?? null)
+  house.userData.hasPhotorealSkins = true
 }
 
 export const whitestoneFootprintFt = { width: W_FT, depth: D_FT }

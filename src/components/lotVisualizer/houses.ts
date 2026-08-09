@@ -62,7 +62,7 @@ const SPECS: Record<string, HouseSpec> = {
   },
   'whitestone-front': {
     widthFt: 94,
-    depthFt: 70,
+    depthFt: 58,
     wallM: 3.2,
     roofRiseM: 2.9,
     // ArchyBase / builder refs: tall RV + two-car on the street-left
@@ -93,7 +93,7 @@ const SPECS: Record<string, HouseSpec> = {
   },
   whitestone: {
     widthFt: 94,
-    depthFt: 70,
+    depthFt: 58,
     wallM: 3.2,
     roofRiseM: 2.9,
     garageWing: 'left',
