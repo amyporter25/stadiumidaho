@@ -483,14 +483,18 @@ export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.
 
 /**
  * Studio house: plan footprint massing.
- * Whitestone uses a dedicated exterior (no photo card). Other plans may still
- * get a photoreal street-facade plane for the marketing elevation.
+ * Whitestone is pure 3D (no front/back photo billboards). Other plans may
+ * still get a street-facade plane for a marketing elevation cutout.
  */
 export function buildStudioHouse(planId: string): THREE.Group {
   const house = buildHouse(planId, { facadeMode: true })
 
-  // Whitestone is already a full street-readable exterior — skip photo overlay
-  if (isWhitestoneFront(planId) || house.getObjectByName('streetFacade')) {
+  // Whitestone already has a full 3D exterior — never add a photo card
+  if (isWhitestoneFront(planId)) {
+    return house
+  }
+
+  if (house.getObjectByName('streetFacade')) {
     return house
   }
 

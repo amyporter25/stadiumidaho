@@ -14,11 +14,6 @@ import {
   buildStudioHouse,
   updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
-import {
-  applyWhitestoneSkins,
-  WHITESTONE_FRONT_SKIN,
-  WHITESTONE_REAR_SKIN,
-} from '../components/lotVisualizer/whitestoneHouse'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -266,40 +261,13 @@ export default function StudioCanvas({
     massingRef.current = house
     anchor.visible = true
 
+    // Whitestone is pure 3D massing (no front/back photo billboards).
     const isWhitestone = planId === 'whitestone-front' || planId === 'whitestone'
-
-    // Whitestone: wrap photoreal front (+ rear) images onto the 3D shell
     if (isWhitestone) {
-      texUrlRef.current = WHITESTONE_FRONT_SKIN
-      const loader = new THREE.TextureLoader()
-      const finish = () => {
-        syncTransform()
-        if (frameView) frameHouseStreetView()
-        onStatus(statusMsg)
-      }
-      loader.load(
-        WHITESTONE_FRONT_SKIN,
-        (frontTex) => {
-          loader.load(
-            WHITESTONE_REAR_SKIN,
-            (rearTex) => {
-              applyWhitestoneSkins(house, frontTex, rearTex)
-              finish()
-            },
-            undefined,
-            () => {
-              // Front-only is still a big upgrade over bare massing
-              applyWhitestoneSkins(house, frontTex, null)
-              finish()
-            }
-          )
-        },
-        undefined,
-        () => {
-          // Skins not uploaded yet — show the 3D massing alone
-          finish()
-        }
-      )
+      texUrlRef.current = `massing:${planId}`
+      syncTransform()
+      if (frameView) frameHouseStreetView()
+      onStatus(statusMsg)
       return
     }
 
