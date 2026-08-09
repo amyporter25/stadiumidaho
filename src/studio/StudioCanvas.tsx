@@ -14,6 +14,11 @@ import {
   buildStudioHouse,
   updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
+import {
+  applyWhitestoneSkins,
+  WHITESTONE_FRONT_SKIN,
+  WHITESTONE_REAR_SKIN,
+} from '../components/lotVisualizer/whitestoneHouse'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -266,16 +271,41 @@ export default function StudioCanvas({
     massingRef.current = house
     anchor.visible = true
 
-    // Whitestone (front or side) is geometry-only 3D — no photo planes.
+    // Whitestone: 3D shell + photoreal front/rear elevation skins
     const isWhitestone =
       planId === 'whitestone-front' ||
       planId === 'whitestone-side' ||
       planId === 'whitestone'
     if (isWhitestone) {
-      texUrlRef.current = `massing:${planId}`
-      syncTransform()
-      if (frameView) frameHouseStreetView()
-      onStatus(statusMsg)
+      texUrlRef.current = WHITESTONE_FRONT_SKIN
+      const loader = new THREE.TextureLoader()
+      const finish = () => {
+        syncTransform()
+        if (frameView) frameHouseStreetView()
+        onStatus(statusMsg)
+      }
+      loader.load(
+        WHITESTONE_FRONT_SKIN,
+        (frontTex) => {
+          loader.load(
+            WHITESTONE_REAR_SKIN,
+            (rearTex) => {
+              applyWhitestoneSkins(house, frontTex, rearTex)
+              finish()
+            },
+            undefined,
+            () => {
+              applyWhitestoneSkins(house, frontTex, null)
+              finish()
+            }
+          )
+        },
+        undefined,
+        () => {
+          // Skins missing — massing alone still places on the lot
+          finish()
+        }
+      )
       return
     }
 
@@ -416,10 +446,10 @@ export default function StudioCanvas({
 
     const statusForPlan = () => {
       if (planId === 'whitestone-side') {
-        return `${plan.name} (side-entry) — driveway meets the side garage doors; RV bay faces the street. Orbit; drag to move.`
+        return `${plan.name} (side-entry) — real exterior on the 3D shell; driveway to the side garage doors. Orbit; drag to move.`
       }
       if (planId === 'whitestone-front' || planId === 'whitestone') {
-        return `${plan.name} (front garage) — driveway meets the street-facing RV + two-car doors. Orbit; drag to move.`
+        return `${plan.name} — real exterior on the 3D shell; driveway to the street-facing garage. Orbit; drag to move.`
       }
       return `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`
     }

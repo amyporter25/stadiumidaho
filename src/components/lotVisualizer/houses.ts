@@ -492,13 +492,13 @@ export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.
 
 /**
  * Studio house: plan footprint massing.
- * Whitestone is pure 3D (no front/back photo billboards). Other plans may
- * still get a street-facade plane for a marketing elevation cutout.
+ * Whitestone ships its own front/rear elevation skins on the shell.
+ * Other plans may get a street-facade plane for a marketing cutout.
  */
 export function buildStudioHouse(planId: string): THREE.Group {
   const house = buildHouse(planId, { facadeMode: true })
 
-  // Whitestone already has a full 3D exterior — never add a photo card
+  // Whitestone owns streetFacade + rearFacade — don't add a second card
   if (isWhitestone(planId)) {
     return house
   }
@@ -573,15 +573,23 @@ export function applyFacadeTexture(house: THREE.Group, tex: THREE.Texture): void
 export function updateFacadeFacing(house: THREE.Group, camera: THREE.Camera): void {
   const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
   if (!facade || !facade.userData.isStreetFacade) return
+  // Whitestone elevation skins stay fully opaque while you're on the street
+  // side; hide only when orbiting past the house so the shell reads as solid.
   house.updateMatrixWorld(true)
   const front = new THREE.Vector3(0, 0, -1).transformDirection(house.matrixWorld)
   const toCam = new THREE.Vector3()
     .subVectors(camera.position, house.getWorldPosition(new THREE.Vector3()))
     .normalize()
-  // Fade out as you orbit past ~55° off the street axis
   const facing = front.dot(toCam)
-  facade.visible = facing > 0.15
   const mat = facade.material as THREE.MeshBasicMaterial
+  if (facade.userData.isElevationSkin || house.userData.hasPhotorealSkins) {
+    facade.visible = facing > 0.05
+    mat.opacity = 1
+    mat.transparent = true
+    return
+  }
+  // Generic marketing cutouts: fade as you leave the street axis
+  facade.visible = facing > 0.15
   mat.opacity = facing > 0.45 ? 1 : Math.max(0, (facing - 0.15) / 0.3)
   mat.transparent = true
 }

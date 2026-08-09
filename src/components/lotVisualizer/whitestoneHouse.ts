@@ -2,9 +2,10 @@ import * as THREE from 'three'
 import { FT_TO_M } from './geo'
 
 /**
- * Whitestone as a real rotatable 3D house — geometry + materials only.
+ * Whitestone as a rotatable 3D house: solid massing shell + photoreal
+ * front/rear elevation skins (alpha-cut silhouettes — not rectangular cards).
  *
- * Two plan layouts share the same living massing but differ at the garage:
+ * Two plan layouts share the living massing but differ at the garage:
  * - front: RV + two-car doors face the street; driveway meets that front face
  * - side:  RV faces the street; two-car doors face the side yard; driveway
  *          meets the side face of the garage wing
@@ -19,9 +20,9 @@ const D_SIDE_FT = 78
 
 export type WhitestoneEntry = 'front' | 'side'
 
-/** Unused — kept so older Studio imports don't break. */
-export const WHITESTONE_FRONT_SKIN = ''
-export const WHITESTONE_REAR_SKIN = ''
+/** ArchyBase exterior cutouts — garage on image-left matches street-view left. */
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=look1'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=look1'
 
 function solid(color: number, roughness = 0.85): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
@@ -185,6 +186,8 @@ export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Gr
   house.userData.garageHeightM = garageH
   house.userData.facadeMode = true
   house.userData.hasPhotorealSkins = false
+  const skinH = garageH + roofRise * 0.85
+  house.userData.facadeHeightM = skinH
 
   // Street-view left → right: garage wing, entry, living (viewer left = local +x)
   const garageW = W * 0.4
@@ -334,9 +337,10 @@ export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Gr
   add(house, 1.7, 1.4, 0.08, trim, livingX - livingW * 0.2, 1.6, D / 2 - 0.1)
   add(house, 1.55, 1.25, 0.05, glass, livingX - livingW * 0.2, 1.6, D / 2 - 0.04)
 
-  // Driveway tip — front doors on street face, or side doors on outer wall
+  // Driveway tip — front doors on street face, or side doors on outer wall.
+  // Front tip sits slightly ahead of the mass so it meets the photoreal skin.
   const doorX = sideEntry ? garageX + garageW / 2 + 1.1 : (rvX + dblX) / 2
-  const doorZ = sideEntry ? garageZ : garageFrontZ
+  const doorZ = sideEntry ? garageZ : garageFrontZ - 0.5
   const approach = new THREE.Object3D()
   approach.name = 'massingGarageDoor'
   approach.position.set(doorX, 0, doorZ)
@@ -349,8 +353,12 @@ export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Gr
   if (sideEntry) {
     add(house, 1.1, 0.05, dblW * 1.4, concrete, doorX - 0.45, 0.025, doorZ)
   } else {
-    add(house, garageW * 0.95, 0.05, 0.8, concrete, garageX, 0.025, garageFrontZ - 0.38)
+    add(house, garageW * 0.95, 0.05, 0.8, concrete, garageX, 0.025, garageFrontZ - 0.45)
   }
+
+  // Photoreal elevation skins (hidden until textures load)
+  house.add(makeSkinPlane('streetFacade', W, skinH, -D / 2 - 0.12, true))
+  house.add(makeSkinPlane('rearFacade', W, skinH, D / 2 + 0.12, false))
 
   house.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
@@ -362,12 +370,150 @@ export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Gr
   return house
 }
 
-/** No-op: photo billboards removed permanently. */
+function makeSkinPlane(
+  name: string,
+  widthM: number,
+  heightM: number,
+  z: number,
+  faceStreet: boolean
+): THREE.Mesh {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    alphaTest: 0.35,
+    depthWrite: true,
+    side: THREE.FrontSide,
+  })
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
+  mesh.name = name
+  mesh.userData.isStreetFacade = faceStreet
+  mesh.userData.isElevationSkin = true
+  mesh.visible = false
+  mesh.renderOrder = 3
+  // Y=π faces −z. Plane U=0 (image-left) lands on local +x = street-view left.
+  if (faceStreet) {
+    mesh.rotation.y = Math.PI
+  }
+  mesh.scale.set(widthM, heightM, 1)
+  mesh.position.set(0, heightM / 2, z)
+  return mesh
+}
+
+function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 8
+  tex.premultiplyAlpha = false
+  tex.wrapS = THREE.ClampToEdgeWrapping
+  tex.wrapT = THREE.ClampToEdgeWrapping
+  tex.repeat.set(1, 1)
+  tex.offset.set(0, 0)
+  tex.center.set(0.5, 0.5)
+  tex.rotation = 0
+  const mat = mesh.material as THREE.MeshBasicMaterial
+  mat.map?.dispose()
+  mat.map = tex
+  mat.transparent = true
+  mat.alphaTest = 0.35
+  mat.depthWrite = true
+  mat.needsUpdate = true
+  mesh.visible = true
+
+  const img = tex.image as HTMLImageElement | undefined
+  if (img?.width && img.height) {
+    const h = widthM / (img.width / img.height)
+    mesh.scale.set(widthM, h, 1)
+    if (mesh.userData.isStreetFacade) mesh.rotation.y = Math.PI
+    mesh.position.y = h / 2
+  }
+}
+
+/**
+ * Wrap the Whitestone shell with photoreal front/rear exteriors.
+ * Alpha-cut PNGs read as the house silhouette — not a rectangular photo card.
+ */
 export function applyWhitestoneSkins(
-  _house: THREE.Group,
-  _front: THREE.Texture,
-  _rear?: THREE.Texture | null
-): void {}
+  house: THREE.Group,
+  front: THREE.Texture,
+  rear?: THREE.Texture | null
+): void {
+  const W = house.userData.widthM as number
+  const D = house.userData.depthM as number
+  const frontMesh = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
+  const rearMesh = house.getObjectByName('rearFacade') as THREE.Mesh | undefined
+  if (frontMesh) {
+    // Ahead of porch/door boxes so massing detail cannot poke through
+    frontMesh.position.z = -D / 2 - 0.55
+    applySkinTexture(frontMesh, front, W)
+    house.userData.facadeHeightM = frontMesh.scale.y
+    house.userData.hasPhotorealSkins = true
+    hideStreetOccluders(house)
+    // Front-entry driveway tip meets the skin garage doors
+    if (house.userData.garageEntry !== 'side') {
+      const door = house.getObjectByName('massingGarageDoor')
+      if (door) {
+        door.position.z = frontMesh.position.z + 0.05
+        house.userData.garageLocalZ = door.position.z
+      }
+    }
+  }
+  if (rear && rearMesh) {
+    rearMesh.position.z = D / 2 + 0.35
+    applySkinTexture(rearMesh, rear, W)
+    hideRearOccluders(house)
+  }
+}
+
+/** Hide thin street-side detail that would poke through the photoreal skin. */
+function hideStreetOccluders(house: THREE.Group): void {
+  house.updateMatrixWorld(true)
+  const origin = new THREE.Vector3()
+  house.getWorldPosition(origin)
+  const q = new THREE.Quaternion()
+  house.getWorldQuaternion(q)
+  const inv = q.clone().invert()
+  const tmp = new THREE.Vector3()
+  const frontLimit = -(house.userData.depthM as number) * 0.12
+
+  house.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return
+    if (o.userData.isElevationSkin || o.name === 'footprintPad') return
+    o.getWorldPosition(tmp)
+    const local = tmp.clone().sub(origin).applyQuaternion(inv)
+    if (local.z > frontLimit) return
+    const geo = (o as THREE.Mesh).geometry
+    if (!geo.boundingBox) geo.computeBoundingBox()
+    const bb = geo.boundingBox
+    if (!bb) return
+    const depth = bb.max.z - bb.min.z
+    // Keep deep wing volumes for orbit; hide porch/door/window chunks
+    if (depth < 6.5) o.visible = false
+  })
+}
+
+function hideRearOccluders(house: THREE.Group): void {
+  house.updateMatrixWorld(true)
+  const origin = new THREE.Vector3()
+  house.getWorldPosition(origin)
+  const q = new THREE.Quaternion()
+  house.getWorldQuaternion(q)
+  const inv = q.clone().invert()
+  const tmp = new THREE.Vector3()
+  const rearLimit = (house.userData.depthM as number) * 0.28
+
+  house.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return
+    if (o.userData.isElevationSkin || o.name === 'footprintPad') return
+    o.getWorldPosition(tmp)
+    const local = tmp.sub(origin).applyQuaternion(inv)
+    if (local.z < rearLimit) return
+    const geo = (o as THREE.Mesh).geometry
+    if (!geo.boundingBox) geo.computeBoundingBox()
+    const bb = geo.boundingBox
+    if (!bb) return
+    const depth = bb.max.z - bb.min.z
+    if (depth < 3.2) o.visible = false
+  })
+}
 
 export const whitestoneFootprintFt = { width: W_FT, depth: D_FRONT_FT }
 export const whitestoneFootprintM = {
