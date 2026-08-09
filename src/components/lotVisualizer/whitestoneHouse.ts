@@ -228,18 +228,17 @@ export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Gr
   const dblH = wallH * 0.7
   if (sideEntry) {
     // Two-car doors on the outer side wall (local +x) — driveway meets here
-    const sideDoorX = garageX + garageW / 2 + 0.08
-    const sideDoorZ = garageZ - garageDepth * 0.08
-    const sideDoor = add(house, 0.12, dblH, dblW * 1.15, doorWhite, sideDoorX, dblH / 2, sideDoorZ)
-    sideDoor.rotation.y = 0
+    const sideDoorX = garageX + garageW / 2 + 0.1
+    const sideDoorZ = garageZ
+    add(house, 0.14, dblH, dblW * 1.35, doorWhite, sideDoorX, dblH / 2, sideDoorZ)
     for (let i = 1; i < 4; i++) {
       add(
         house,
-        0.03,
-        0.035,
-        dblW * 1.05,
+        0.04,
+        0.04,
+        dblW * 1.2,
         solid(0xd4d1c8, 0.9),
-        sideDoorX + 0.04,
+        sideDoorX + 0.06,
         (dblH * i) / 4,
         sideDoorZ
       )
@@ -336,18 +335,19 @@ export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Gr
   add(house, 1.55, 1.25, 0.05, glass, livingX - livingW * 0.2, 1.6, D / 2 - 0.04)
 
   // Driveway tip — front doors on street face, or side doors on outer wall
-  const doorX = sideEntry ? garageX + garageW / 2 + 0.9 : (rvX + dblX) / 2
-  const doorZ = sideEntry ? garageZ - garageDepth * 0.08 : garageFrontZ
+  const doorX = sideEntry ? garageX + garageW / 2 + 1.1 : (rvX + dblX) / 2
+  const doorZ = sideEntry ? garageZ : garageFrontZ
   const approach = new THREE.Object3D()
   approach.name = 'massingGarageDoor'
   approach.position.set(doorX, 0, doorZ)
   house.add(approach)
   house.userData.garageLocalX = doorX
   house.userData.garageLocalZ = doorZ
+  house.userData.garageEntry = entry
 
   // Flush threshold under the doors the driveway serves
   if (sideEntry) {
-    add(house, 0.8, 0.05, dblW * 1.2, concrete, doorX - 0.35, 0.025, doorZ)
+    add(house, 1.1, 0.05, dblW * 1.4, concrete, doorX - 0.45, 0.025, doorZ)
   } else {
     add(house, garageW * 0.95, 0.05, 0.8, concrete, garageX, 0.025, garageFrontZ - 0.38)
   }

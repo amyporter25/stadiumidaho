@@ -700,29 +700,17 @@ export default function StudioCanvas({
         return
       }
 
-      // World-space garage door from massing local offset (viewer-left = +x).
+      // World-space garage door for the active plan (front face or side wall).
       const massing = massingRef.current
       const anchor = anchorRef.current!
-      const doorX = massing?.visible
-        ? (massing.userData.garageLocalX as number | undefined)
-        : undefined
-      const doorZ = massing?.visible
-        ? (massing.userData.garageLocalZ as number | undefined)
-        : undefined
-      if (massing?.visible && doorX != null && doorZ != null) {
-        const s = massing.scale.x
-        const lx = doorX * s
-        const lz = doorZ * s
-        const yaw = anchor.rotation.y
-        const cy = Math.cos(yaw)
-        const sy = Math.sin(yaw)
-        worldDoor.set(
-          anchor.position.x + lx * cy + lz * sy,
-          0,
-          anchor.position.z - lx * sy + lz * cy
-        )
+      const doorMarker =
+        massing?.visible ? massing.getObjectByName('massingGarageDoor') : null
+      if (doorMarker) {
+        doorMarker.getWorldPosition(worldDoor)
+        worldDoor.y = 0
       } else if (approachRef.current) {
         approachRef.current.getWorldPosition(worldDoor)
+        worldDoor.y = 0
       } else {
         worldDoor.set(anchor.position.x, 0, anchor.position.z)
       }
