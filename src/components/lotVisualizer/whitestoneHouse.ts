@@ -12,8 +12,8 @@ import { FT_TO_M } from './geo'
 const W_FT = 94
 const D_FT = 58
 
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=mass1'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=mass1'
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=mass2'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=mass2'
 
 const SIDING = 0xf2efe6
 const ROOF = 0x2a2a28
@@ -117,29 +117,29 @@ export function buildWhitestoneHouse(): THREE.Group {
   const elevH = garageH + roofRise * 0.55
   house.userData.facadeHeightM = elevH
 
-  // Front elevation face — flush with street face of the garage mass (−z)
+  // Elevation faces sit a hair outside the massing to avoid z-fighting with
+  // the box walls they cover. Photos are opaque (no see-through sky holes).
   const frontFace = makeElevationFace('streetFacade', W, elevH, true)
-  frontFace.position.set(0, elevH / 2, -D / 2)
+  frontFace.position.set(0, elevH / 2, -D / 2 - 0.03)
   house.add(frontFace)
 
-  // Rear elevation face — flush with rear of the living mass (+z)
   const rearFace = makeElevationFace('rearFacade', W, elevH, false)
-  rearFace.position.set(0, elevH / 2, D / 2)
+  rearFace.position.set(0, elevH / 2, D / 2 + 0.03)
   house.add(rearFace)
 
-  // Driveway tip — center of left garage wing, exactly on the street face
+  // Driveway tip — center of left garage wing at the street elevation face
   const approach = new THREE.Object3D()
   approach.name = 'garageApproach'
-  approach.position.set(garageX, 0, -D / 2)
+  approach.position.set(garageX, 0, -D / 2 - 0.03)
   house.add(approach)
 
   // Thin threshold slab under the garage doors — driveway meets this flush
   const threshold = new THREE.Mesh(
-    new THREE.BoxGeometry(garageW * 0.95, 0.06, 0.9),
+    new THREE.BoxGeometry(garageW * 0.92, 0.05, 0.7),
     mat(0xc8c6be, 0.95)
   )
   threshold.name = 'garageThreshold'
-  threshold.position.set(garageX, 0.03, -D / 2 - 0.35)
+  threshold.position.set(garageX, 0.025, -D / 2 - 0.38)
   house.add(threshold)
 
   house.traverse((o) => {
@@ -215,9 +215,9 @@ export function applyWhitestoneSkins(
     m.map?.dispose()
     m.map = tex
     m.color.set(0xffffff)
-    m.transparent = true
-    // Hard cut — no soft halo / fringe at the foundation
-    m.alphaTest = 0.5
+    // Opaque elevations — no ghosting through sky cutouts when orbiting
+    m.transparent = false
+    m.alphaTest = 0
     m.depthWrite = true
     m.needsUpdate = true
 
