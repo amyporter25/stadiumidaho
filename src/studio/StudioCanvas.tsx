@@ -14,11 +14,6 @@ import {
   buildStudioHouse,
   updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
-import {
-  applyWhitestoneSkins,
-  WHITESTONE_FRONT_SKIN,
-  WHITESTONE_REAR_SKIN,
-} from '../components/lotVisualizer/whitestoneHouse'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -266,36 +261,13 @@ export default function StudioCanvas({
     massingRef.current = house
     anchor.visible = true
 
+    // Whitestone is geometry-only 3D (no photo planes — those always look like cards).
     const isWhitestone = planId === 'whitestone-front' || planId === 'whitestone'
-
-    // Whitestone: house-shaped cutouts (transparent outside silhouette — no square card)
     if (isWhitestone) {
-      texUrlRef.current = WHITESTONE_FRONT_SKIN
-      const loader = new THREE.TextureLoader()
-      const finish = () => {
-        syncTransform()
-        if (frameView) frameHouseStreetView()
-        onStatus(statusMsg)
-      }
-      loader.load(
-        WHITESTONE_FRONT_SKIN,
-        (frontTex) => {
-          loader.load(
-            WHITESTONE_REAR_SKIN,
-            (rearTex) => {
-              applyWhitestoneSkins(house, frontTex, rearTex)
-              finish()
-            },
-            undefined,
-            () => {
-              applyWhitestoneSkins(house, frontTex, null)
-              finish()
-            }
-          )
-        },
-        undefined,
-        () => finish()
-      )
+      texUrlRef.current = `massing:${planId}`
+      syncTransform()
+      if (frameView) frameHouseStreetView()
+      onStatus(statusMsg)
       return
     }
 
