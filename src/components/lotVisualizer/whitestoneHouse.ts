@@ -395,10 +395,12 @@ export function buildWhitestoneHouse(): THREE.Group {
     house.add(col)
   }
 
-  // Driveway tip — center of the two front garage doors (left wing)
+  // Driveway tip — center of the two front garage doors (left wing).
+  // Sit at the street skin plane so pave meets the photoreal garage doors
+  // (massing garage face is slightly recessed behind that plane).
   const approach = new THREE.Object3D()
   approach.name = 'garageApproach'
-  approach.position.set((rvX + dblX) / 2, 0, garageFrontZ - 0.5)
+  approach.position.set((rvX + dblX) / 2, 0, -D / 2 - 0.55)
   house.add(approach)
 
   // Soft contact pad under footprint
@@ -453,10 +455,11 @@ function makeSkinPlane(
   mesh.userData.isElevationSkin = true
   mesh.visible = false
   mesh.renderOrder = 3
-  // Street-facing plane uses Y=π + negative X scale so image-left stays left
+  // Face −z (street). Texture U=0 is image-left; after Y=π that lands on
+  // world −X (house left) without an extra X flip — matches left-RV refs.
   if (faceStreet) {
     mesh.rotation.y = Math.PI
-    mesh.scale.set(-widthM, heightM, 1)
+    mesh.scale.set(widthM, heightM, 1)
   } else {
     mesh.scale.set(widthM, heightM, 1)
   }
@@ -465,18 +468,26 @@ function makeSkinPlane(
 }
 
 /** Paths for Whitestone exterior wraps (cleaned cutouts preferred). */
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy1'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy1'
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy2'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy2'
 
 function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 8
   tex.premultiplyAlpha = false
+  // Ensure image-left stays house-left on the street plane (no mirror).
+  tex.wrapS = THREE.ClampToEdgeWrapping
+  tex.wrapT = THREE.ClampToEdgeWrapping
+  tex.repeat.set(1, 1)
+  tex.offset.set(0, 0)
+  tex.center.set(0.5, 0.5)
+  tex.rotation = 0
   const mat = mesh.material as THREE.MeshBasicMaterial
   mat.map?.dispose()
   mat.map = tex
   mat.transparent = true
-  mat.alphaTest = 0.3
+  mat.alphaTest = 0.35
+  mat.depthWrite = true
   mat.needsUpdate = true
   mesh.visible = true
 
@@ -484,7 +495,8 @@ function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number):
   if (img?.width && img.height) {
     const h = widthM / (img.width / img.height)
     const faceStreet = !!mesh.userData.isStreetFacade
-    mesh.scale.set(faceStreet ? -widthM : widthM, h, 1)
+    mesh.scale.set(widthM, h, 1)
+    if (faceStreet) mesh.rotation.y = Math.PI
     mesh.position.y = h / 2
   }
 }
@@ -499,40 +511,82 @@ export function applyWhitestoneSkins(
   rear?: THREE.Texture | null
 ): void {
   const W = house.userData.widthM as number
+  const D = house.userData.depthM as number
   const frontMesh = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
   const rearMesh = house.getObjectByName('rearFacade') as THREE.Mesh | undefined
   if (frontMesh) {
+    // Sit just ahead of the furthest street-facing mass so porch boxes
+    // cannot poke through the photoreal elevation.
+    frontMesh.position.z = -D / 2 - 0.55
     applySkinTexture(frontMesh, front, W)
     house.userData.facadeHeightM = frontMesh.scale.y
     house.userData.hasPhotorealSkins = true
-    // Skins carry the street-facing detail; keep massing for sides/orbit depth.
-    hideFrontDetailMeshes(house)
+    hideStreetOccluders(house)
   }
   if (rear && rearMesh) {
+    rearMesh.position.z = D / 2 + 0.35
     applySkinTexture(rearMesh, rear, W)
+    hideRearOccluders(house)
   }
 }
 
-/** Hide thin front-facing props that double up under the photoreal street skin. */
-function hideFrontDetailMeshes(house: THREE.Group): void {
-  const frontZ = -(house.userData.depthM as number) * 0.35
+/**
+ * Hide street-side massing that would poke through / sit in front of the
+ * photoreal skin (porch volumes, doors, windows). Uses world Z so nested
+ * meshes inside gable groups are included.
+ */
+function hideStreetOccluders(house: THREE.Group): void {
+  house.updateMatrixWorld(true)
+  const origin = new THREE.Vector3()
+  house.getWorldPosition(origin)
+  const q = new THREE.Quaternion()
+  house.getWorldQuaternion(q)
+  const inv = q.clone().invert()
+  const tmp = new THREE.Vector3()
+  const frontLimit = -(house.userData.depthM as number) * 0.22
+
   house.traverse((o) => {
     if (!(o as THREE.Mesh).isMesh) return
     if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
-    // Only hide near-street thin accents (doors/windows/lights), not wing volumes
-    const z = o.position.z
-    if (z > frontZ) return
+    o.getWorldPosition(tmp)
+    // House-local Z: more negative = closer to street
+    const local = tmp.sub(origin).applyQuaternion(inv)
+    if (local.z > frontLimit) return
     const geo = (o as THREE.Mesh).geometry
-    if (!geo?.boundingBox) geo.computeBoundingBox()
+    if (!geo.boundingBox) geo.computeBoundingBox()
     const bb = geo.boundingBox
     if (!bb) return
     const depth = bb.max.z - bb.min.z
     const width = bb.max.x - bb.min.x
-    const height = bb.max.y - bb.min.y
-    // Paneled doors, window boxes, light arms — shallow relative to footprint
-    if (depth < 0.35 && width < (house.userData.widthM as number) * 0.55 && height < 5.5) {
+    // Hide shallow facade props and forward porch/entry chunks, keep deep wings
+    if (depth < 3.5 && width < (house.userData.widthM as number) * 0.7) {
       o.visible = false
     }
+  })
+}
+
+function hideRearOccluders(house: THREE.Group): void {
+  house.updateMatrixWorld(true)
+  const origin = new THREE.Vector3()
+  house.getWorldPosition(origin)
+  const q = new THREE.Quaternion()
+  house.getWorldQuaternion(q)
+  const inv = q.clone().invert()
+  const tmp = new THREE.Vector3()
+  const rearLimit = (house.userData.depthM as number) * 0.28
+
+  house.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return
+    if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
+    o.getWorldPosition(tmp)
+    const local = tmp.sub(origin).applyQuaternion(inv)
+    if (local.z < rearLimit) return
+    const geo = (o as THREE.Mesh).geometry
+    if (!geo.boundingBox) geo.computeBoundingBox()
+    const bb = geo.boundingBox
+    if (!bb) return
+    const depth = bb.max.z - bb.min.z
+    if (depth < 3.2) o.visible = false
   })
 }
 
