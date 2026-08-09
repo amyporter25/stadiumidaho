@@ -307,11 +307,14 @@ export function buildWhitestoneHouse(): THREE.Group {
   add(house, 1.7, 1.4, 0.08, trim, livingX - livingW * 0.2, 1.6, D / 2 - 0.1)
   add(house, 1.55, 1.25, 0.05, glass, livingX - livingW * 0.2, 1.6, D / 2 - 0.04)
 
-  // Driveway tip at garage doors
+  // Driveway tip at garage doors (street-view left = local +x)
+  const doorX = (rvX + dblX) / 2
   const approach = new THREE.Object3D()
-  approach.name = 'garageApproach'
-  approach.position.set((rvX + dblX) / 2, 0, garageFrontZ)
+  approach.name = 'massingGarageDoor'
+  approach.position.set(doorX, 0, garageFrontZ)
   house.add(approach)
+  house.userData.garageLocalX = doorX
+  house.userData.garageLocalZ = garageFrontZ
 
   // Flush threshold — driveway meets here cleanly
   add(house, garageW * 0.95, 0.05, 0.8, concrete, garageX, 0.025, garageFrontZ - 0.38)

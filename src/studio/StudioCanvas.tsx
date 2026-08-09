@@ -191,15 +191,20 @@ export default function StudioCanvas({
       const baseW = (massing.userData.widthM as number) || 1
       const scale = (widthRef.current * FT_TO_M) / baseW
       massing.scale.set(scale, scale, scale)
-      // Use the massing's built-in garageApproach (plan footprint–accurate).
-      // approachRef lives on the anchor (unscaled), so bake massing scale in.
-      const builtIn = massing.getObjectByName('garageApproach')
-      if (builtIn && approachRef.current) {
-        approachRef.current.position.set(
-          builtIn.position.x * scale,
-          0,
-          builtIn.position.z * scale
-        )
+      // Bake massing garage door into the anchor tip (anchor is unscaled).
+      const doorX = massing.userData.garageLocalX as number | undefined
+      const doorZ = massing.userData.garageLocalZ as number | undefined
+      if (approachRef.current && doorX != null && doorZ != null) {
+        approachRef.current.position.set(doorX * scale, 0, doorZ * scale)
+      } else {
+        const builtIn = massing.getObjectByName('massingGarageDoor')
+        if (builtIn && approachRef.current) {
+          approachRef.current.position.set(
+            builtIn.position.x * scale,
+            0,
+            builtIn.position.z * scale
+          )
+        }
       }
     }
 
@@ -690,16 +695,31 @@ export default function StudioCanvas({
         return
       }
 
-      // World-space garage door — prefer the massing marker (correct wing side)
-      const massingDoor = massingRef.current?.visible
-        ? massingRef.current.getObjectByName('garageApproach')
-        : null
-      if (massingDoor) {
-        massingDoor.getWorldPosition(worldDoor)
+      // World-space garage door from massing local offset (viewer-left = +x).
+      const massing = massingRef.current
+      const anchor = anchorRef.current!
+      const doorX = massing?.visible
+        ? (massing.userData.garageLocalX as number | undefined)
+        : undefined
+      const doorZ = massing?.visible
+        ? (massing.userData.garageLocalZ as number | undefined)
+        : undefined
+      if (massing?.visible && doorX != null && doorZ != null) {
+        const s = massing.scale.x
+        const lx = doorX * s
+        const lz = doorZ * s
+        const yaw = anchor.rotation.y
+        const cy = Math.cos(yaw)
+        const sy = Math.sin(yaw)
+        worldDoor.set(
+          anchor.position.x + lx * cy + lz * sy,
+          0,
+          anchor.position.z - lx * sy + lz * cy
+        )
       } else if (approachRef.current) {
         approachRef.current.getWorldPosition(worldDoor)
       } else {
-        worldDoor.set(anchorRef.current!.position.x, 0, anchorRef.current!.position.z)
+        worldDoor.set(anchor.position.x, 0, anchor.position.z)
       }
 
       const [fx, fz] = frontMidRef.current

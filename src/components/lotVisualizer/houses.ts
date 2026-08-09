@@ -460,14 +460,18 @@ export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.
 
   // Driveway apron attach point (local space)
   const approach = new THREE.Object3D()
-  approach.name = 'garageApproach'
+  approach.name = 'massingGarageDoor'
   if (spec.garageEntry === 'side') {
     const sideX = garageOnLeft
       ? garageX - garageW / 2 - 1.2
       : garageX + garageW / 2 + 1.2
     approach.position.set(sideX, 0, -D * 0.02)
+    house.userData.garageLocalX = sideX
+    house.userData.garageLocalZ = -D * 0.02
   } else {
     approach.position.set(garageX, 0, garageFrontZ - 0.35)
+    house.userData.garageLocalX = garageX
+    house.userData.garageLocalZ = garageFrontZ - 0.35
   }
   house.add(approach)
 
