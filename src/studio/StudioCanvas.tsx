@@ -690,10 +690,17 @@ export default function StudioCanvas({
         return
       }
 
-      // World-space garage door — ribbon runs curb → under the door / into the volume
-      const approach = approachRef.current
-      if (approach) approach.getWorldPosition(worldDoor)
-      else worldDoor.set(anchorRef.current!.position.x, 0, anchorRef.current!.position.z)
+      // World-space garage door — prefer the massing marker (correct wing side)
+      const massingDoor = massingRef.current?.visible
+        ? massingRef.current.getObjectByName('garageApproach')
+        : null
+      if (massingDoor) {
+        massingDoor.getWorldPosition(worldDoor)
+      } else if (approachRef.current) {
+        approachRef.current.getWorldPosition(worldDoor)
+      } else {
+        worldDoor.set(anchorRef.current!.position.x, 0, anchorRef.current!.position.z)
+      }
 
       const [fx, fz] = frontMidRef.current
       let dx = worldDoor.x - fx

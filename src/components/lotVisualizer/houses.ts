@@ -29,7 +29,7 @@ interface HouseSpec {
   depthFt: number
   wallM: number
   roofRiseM: number
-  /** Garage wing as seen from the street (camera looking toward +z). */
+  /** Garage wing side for the procedural massing (Whitestone uses its own builder). */
   garageWing: 'right' | 'left' | 'none'
   garageEntry: GarageEntry
   garageWidthFrac: number

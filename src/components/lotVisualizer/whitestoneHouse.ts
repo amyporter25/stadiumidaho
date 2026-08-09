@@ -6,9 +6,11 @@ import { FT_TO_M } from './geo'
  *
  * We do NOT paste front/rear photos onto planes. Photo cards always read as
  * a 2D square/cutout. Instead the massing is built to match the ArchyBase
- * elevations: left RV + garage, timber entry, living wing, rear glass gable.
+ * elevations: street-view–left RV + garage, timber entry, living wing, rear
+ * glass gable.
  *
  * Street faces −z. Origin = footprint center at ground.
+ * Street camera looks toward +z at the facade, so viewer's left = local +x.
  */
 
 const W_FT = 94
@@ -179,13 +181,13 @@ export function buildWhitestoneHouse(): THREE.Group {
   house.userData.facadeMode = true
   house.userData.hasPhotorealSkins = false
 
-  // Left → right proportions matching ArchyBase front
+  // Street-view left → right: RV, two-car, entry, living (viewer left = local +x)
   const garageW = W * 0.4
   const entryW = W * 0.22
   const livingW = W - garageW - entryW
-  const garageX = -W / 2 + garageW / 2
-  const entryX = -W / 2 + garageW + entryW / 2
-  const livingX = W / 2 - livingW / 2
+  const garageX = W / 2 - garageW / 2
+  const entryX = W / 2 - garageW - entryW / 2
+  const livingX = -W / 2 + livingW / 2
 
   const garageDepth = D * 0.88
   const garageFrontZ = -D / 2
@@ -193,14 +195,15 @@ export function buildWhitestoneHouse(): THREE.Group {
 
   // --- Main living mass (continuous solid body) ---
   const main = sideGable(livingW + entryW * 0.4, D * 0.95, wallH, roofRise, siding, roof)
-  main.position.set((entryX + livingX) / 2 + livingW * 0.06, 0, 0.05)
+  main.position.set((entryX + livingX) / 2 - livingW * 0.06, 0, 0.05)
   house.add(main)
 
-  // --- Garage wing: RV (tall) + double bay — LEFT, street-facing gables ---
+  // --- Garage wing: RV (tall) + double bay — street-view LEFT ---
   const rvW = garageW * 0.4
   const dblW = garageW * 0.52
-  const rvX = garageX - garageW / 2 + rvW / 2 + 0.12
-  const dblX = garageX + garageW / 2 - dblW / 2 - 0.08
+  // RV on the outer (+x) edge, double bay toward the entry
+  const rvX = garageX + garageW / 2 - rvW / 2 - 0.12
+  const dblX = garageX - garageW / 2 + dblW / 2 + 0.08
 
   const rvBay = streetGable(rvW + 0.45, garageDepth, garageH, roofRise * 0.72, siding, roof)
   rvBay.position.set(rvX, 0, garageZ)
@@ -251,12 +254,12 @@ export function buildWhitestoneHouse(): THREE.Group {
   add(house, 0.55, 1.75, 0.05, glass, entryX - 0.38, 1.35, -D / 2 + 0.15)
   add(house, 0.55, 1.75, 0.05, glass, entryX + 0.38, 1.35, -D / 2 + 0.15)
 
-  // Living windows + shutters
+  // Living windows + shutters (wing on street-view right / local −x)
   const winZ = -D / 2 + 0.15
   for (const [wx, ww, wh, shut] of [
-    [livingX - livingW * 0.22, 1.05, 1.6, false],
-    [livingX + livingW * 0.12, 1.85, 1.5, true],
-    [livingX + livingW * 0.38, 1.85, 1.5, true],
+    [livingX + livingW * 0.22, 1.05, 1.6, false],
+    [livingX - livingW * 0.12, 1.85, 1.5, true],
+    [livingX - livingW * 0.38, 1.85, 1.5, true],
   ] as const) {
     add(house, ww + 0.14, wh + 0.14, 0.08, trim, wx, 1.7, winZ)
     add(house, ww, wh, 0.05, glass, wx, 1.7, winZ - 0.05)
@@ -269,12 +272,12 @@ export function buildWhitestoneHouse(): THREE.Group {
 
   // Accent gable on living wing
   const livingGable = streetGable(livingW * 0.45, D * 0.2, wallH * 1.02, roofRise * 0.55, siding, roof)
-  livingGable.position.set(livingX + livingW * 0.05, 0, -D / 2 + D * 0.12)
+  livingGable.position.set(livingX - livingW * 0.05, 0, -D / 2 + D * 0.12)
   house.add(livingGable)
-  add(house, 0.5, 1.05, 0.08, glass, livingX + livingW * 0.05, wallH + 0.55, -D / 2 + 0.25)
+  add(house, 0.5, 1.05, 0.08, glass, livingX - livingW * 0.05, wallH + 0.55, -D / 2 + 0.25)
 
   // --- Rear glass gable (joined to main body — not a floating chunk) ---
-  const rearCenterX = entryX + entryW * 0.08
+  const rearCenterX = entryX - entryW * 0.08
   const rearGableW = (livingW + entryW) * 0.58
   const rearDepth = D * 0.26
   const rear = streetGable(rearGableW, rearDepth, wallH * 1.06, roofRise * 0.9, siding, roof)
@@ -301,8 +304,8 @@ export function buildWhitestoneHouse(): THREE.Group {
   }
 
   // Secondary rear windows on living wing
-  add(house, 1.7, 1.4, 0.08, trim, livingX + livingW * 0.2, 1.6, D / 2 - 0.1)
-  add(house, 1.55, 1.25, 0.05, glass, livingX + livingW * 0.2, 1.6, D / 2 - 0.04)
+  add(house, 1.7, 1.4, 0.08, trim, livingX - livingW * 0.2, 1.6, D / 2 - 0.1)
+  add(house, 1.55, 1.25, 0.05, glass, livingX - livingW * 0.2, 1.6, D / 2 - 0.04)
 
   // Driveway tip at garage doors
   const approach = new THREE.Object3D()
@@ -335,4 +338,5 @@ export const whitestoneFootprintM = {
   wM: W_FT * FT_TO_M,
   dM: D_FT * FT_TO_M,
 }
+/** Viewer-space garage center (−0.5 left … +0.5 right). Left wing ⇒ negative. */
 export const whitestoneGarageXFrac = -0.28
