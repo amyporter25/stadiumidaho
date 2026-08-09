@@ -468,8 +468,8 @@ function makeSkinPlane(
 }
 
 /** Paths for Whitestone exterior wraps (cleaned cutouts preferred). */
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy2'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy2'
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy3'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy3'
 
 function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
   tex.colorSpace = THREE.SRGBColorSpace
@@ -543,25 +543,23 @@ function hideStreetOccluders(house: THREE.Group): void {
   house.getWorldQuaternion(q)
   const inv = q.clone().invert()
   const tmp = new THREE.Vector3()
-  const frontLimit = -(house.userData.depthM as number) * 0.22
+  // Anything whose center sits in the front third is an occluder risk
+  const frontLimit = -(house.userData.depthM as number) * 0.12
 
   house.traverse((o) => {
     if (!(o as THREE.Mesh).isMesh) return
     if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
     o.getWorldPosition(tmp)
     // House-local Z: more negative = closer to street
-    const local = tmp.sub(origin).applyQuaternion(inv)
+    const local = tmp.clone().sub(origin).applyQuaternion(inv)
     if (local.z > frontLimit) return
     const geo = (o as THREE.Mesh).geometry
     if (!geo.boundingBox) geo.computeBoundingBox()
     const bb = geo.boundingBox
     if (!bb) return
     const depth = bb.max.z - bb.min.z
-    const width = bb.max.x - bb.min.x
-    // Hide shallow facade props and forward porch/entry chunks, keep deep wings
-    if (depth < 3.5 && width < (house.userData.widthM as number) * 0.7) {
-      o.visible = false
-    }
+    // Keep only deep primary wing volumes; hide porch/entry/door/window chunks
+    if (depth < 6.5) o.visible = false
   })
 }
 

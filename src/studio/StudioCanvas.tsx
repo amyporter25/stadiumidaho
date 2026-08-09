@@ -742,9 +742,9 @@ export default function StudioCanvas({
       const uz = dz / len
 
       // Overshoot past the facade into the house mass so pave reads as going
-      // all the way under the garage door (billboard has no depth).
-      const tipX = worldDoor.x + ux * 8.0
-      const tipZ = worldDoor.z + uz * 8.0
+      // all the way under the garage door (billboard skins have no depth).
+      const tipX = worldDoor.x + ux * 12.0
+      const tipZ = worldDoor.z + uz * 12.0
       dx = tipX - fx
       dz = tipZ - fz
       len = Math.hypot(dx, dz)
