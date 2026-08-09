@@ -109,8 +109,8 @@ export const homePlans: HomePlan[] = [
     baths: '2.5 baths',
     garage: 'Side-entry two-car + front-facing tall RV bay',
     garageEntry: 'side',
-    // Side-entry: approach the left wing until a dedicated elevation is supplied
-    garageXFrac: -0.36,
+    // Viewer-left garage wing; driveway aims at the side-yard two-car doors
+    garageXFrac: -0.42,
     porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Same Whitestone living layout, side-loaded garage',

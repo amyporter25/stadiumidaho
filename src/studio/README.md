@@ -34,10 +34,10 @@ Construction PDFs live in `public/plans/`:
 | Plan | File | Garage |
 |------|------|--------|
 | Brownstone | `brownstone-15-2-rwr.pdf` | Front-facing + RV bay |
-| Whitestone · front | `whitestone-7-2-rwr.pdf` | Front-facing garage + RV bay |
-| Whitestone · side | `whitestone-29-3-pse.pdf` | Side-entry garage + front RV bay |
+| Whitestone · front | `whitestone-7-2-rwr.pdf` | Front-facing garage + RV bay → driveway to street face |
+| Whitestone · side | `whitestone-29-3-pse.pdf` | Side-entry two-car + front RV → driveway to side doors |
 
-Catalog + footprints: `src/data/plans.ts`. Massings: `src/components/lotVisualizer/houses.ts`.
+Catalog + footprints: `src/data/plans.ts`. Whitestone massings: `whitestoneHouse.ts` (front/side entry).
 
 ## Optional splat experiment
 

@@ -289,14 +289,19 @@ function resolveSpec(planId: string): HouseSpec {
   return SPECS[planId] ?? SPECS.brownstone
 }
 
-function isWhitestoneFront(planId: string): boolean {
-  return planId === 'whitestone-front' || planId === 'whitestone'
+function isWhitestone(planId: string): boolean {
+  return (
+    planId === 'whitestone-front' ||
+    planId === 'whitestone-side' ||
+    planId === 'whitestone'
+  )
 }
 
 export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.Group {
-  // Dedicated Whitestone exterior from front/rear + dollhouse refs
-  if (isWhitestoneFront(planId)) {
-    return buildWhitestoneHouse()
+  // Dedicated Whitestone exterior — front- or side-entry garage per plan
+  if (isWhitestone(planId)) {
+    const entry = planId === 'whitestone-side' ? 'side' : 'front'
+    return buildWhitestoneHouse(entry)
   }
 
   const facadeMode = !!opts.facadeMode
@@ -494,7 +499,7 @@ export function buildStudioHouse(planId: string): THREE.Group {
   const house = buildHouse(planId, { facadeMode: true })
 
   // Whitestone already has a full 3D exterior — never add a photo card
-  if (isWhitestoneFront(planId)) {
+  if (isWhitestone(planId)) {
     return house
   }
 

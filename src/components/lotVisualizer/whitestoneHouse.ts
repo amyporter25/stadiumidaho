@@ -4,17 +4,20 @@ import { FT_TO_M } from './geo'
 /**
  * Whitestone as a real rotatable 3D house — geometry + materials only.
  *
- * We do NOT paste front/rear photos onto planes. Photo cards always read as
- * a 2D square/cutout. Instead the massing is built to match the ArchyBase
- * elevations: street-view–left RV + garage, timber entry, living wing, rear
- * glass gable.
+ * Two plan layouts share the same living massing but differ at the garage:
+ * - front: RV + two-car doors face the street; driveway meets that front face
+ * - side:  RV faces the street; two-car doors face the side yard; driveway
+ *          meets the side face of the garage wing
  *
  * Street faces −z. Origin = footprint center at ground.
  * Street camera looks toward +z at the facade, so viewer's left = local +x.
  */
 
 const W_FT = 94
-const D_FT = 58
+const D_FRONT_FT = 58
+const D_SIDE_FT = 78
+
+export type WhitestoneEntry = 'front' | 'side'
 
 /** Unused — kept so older Studio imports don't break. */
 export const WHITESTONE_FRONT_SKIN = ''
@@ -147,9 +150,10 @@ function add(
   return m
 }
 
-export function buildWhitestoneHouse(): THREE.Group {
+export function buildWhitestoneHouse(entry: WhitestoneEntry = 'front'): THREE.Group {
+  const sideEntry = entry === 'side'
   const W = W_FT * FT_TO_M
-  const D = D_FT * FT_TO_M
+  const D = (sideEntry ? D_SIDE_FT : D_FRONT_FT) * FT_TO_M
   const wallH = 3.15
   const garageH = 4.5
   const roofRise = 2.4
@@ -171,8 +175,9 @@ export function buildWhitestoneHouse(): THREE.Group {
   const concrete = solid(0xc8c6be, 0.95)
 
   const house = new THREE.Group()
-  house.name = 'house-whitestone'
-  house.userData.planId = 'whitestone-front'
+  house.name = sideEntry ? 'house-whitestone-side' : 'house-whitestone'
+  house.userData.planId = sideEntry ? 'whitestone-side' : 'whitestone-front'
+  house.userData.garageEntry = entry
   house.userData.widthM = W
   house.userData.depthM = D
   house.userData.wallM = wallH
@@ -181,7 +186,7 @@ export function buildWhitestoneHouse(): THREE.Group {
   house.userData.facadeMode = true
   house.userData.hasPhotorealSkins = false
 
-  // Street-view left → right: RV, two-car, entry, living (viewer left = local +x)
+  // Street-view left → right: garage wing, entry, living (viewer left = local +x)
   const garageW = W * 0.4
   const entryW = W * 0.22
   const livingW = W - garageW - entryW
@@ -189,7 +194,7 @@ export function buildWhitestoneHouse(): THREE.Group {
   const entryX = W / 2 - garageW - entryW / 2
   const livingX = -W / 2 + livingW / 2
 
-  const garageDepth = D * 0.88
+  const garageDepth = D * (sideEntry ? 0.92 : 0.88)
   const garageFrontZ = -D / 2
   const garageZ = garageFrontZ + garageDepth / 2
 
@@ -198,9 +203,9 @@ export function buildWhitestoneHouse(): THREE.Group {
   main.position.set((entryX + livingX) / 2 - livingW * 0.06, 0, 0.05)
   house.add(main)
 
-  // --- Garage wing: RV (tall) + double bay — street-view LEFT ---
-  const rvW = garageW * 0.4
-  const dblW = garageW * 0.52
+  // --- Garage wing on street-view LEFT ---
+  const rvW = garageW * (sideEntry ? 0.55 : 0.4)
+  const dblW = garageW * (sideEntry ? 0.42 : 0.52)
   // RV on the outer (+x) edge, double bay toward the entry
   const rvX = garageX + garageW / 2 - rvW / 2 - 0.12
   const dblX = garageX - garageW / 2 + dblW / 2 + 0.08
@@ -209,11 +214,11 @@ export function buildWhitestoneHouse(): THREE.Group {
   rvBay.position.set(rvX, 0, garageZ)
   house.add(rvBay)
 
-  const dblBay = streetGable(dblW + 0.4, garageDepth * 0.92, wallH + 0.2, roofRise * 0.65, siding, roof)
-  dblBay.position.set(dblX, 0, garageZ + 0.15)
+  const dblBay = streetGable(dblW + 0.4, garageDepth * (sideEntry ? 0.98 : 0.92), wallH + 0.2, roofRise * 0.65, siding, roof)
+  dblBay.position.set(dblX, 0, garageZ + (sideEntry ? 0.05 : 0.15))
   house.add(dblBay)
 
-  // Garage doors recessed in street face
+  // Garage doors — front plan: both on street face; side plan: RV street, two-car on side wall
   const rvH = garageH * 0.76
   add(house, rvW * 0.88, rvH, 0.12, doorWhite, rvX, rvH / 2, garageFrontZ + 0.1)
   for (let i = 1; i < 5; i++) {
@@ -221,13 +226,36 @@ export function buildWhitestoneHouse(): THREE.Group {
   }
 
   const dblH = wallH * 0.7
-  add(house, dblW * 0.9, dblH, 0.12, doorWhite, dblX, dblH / 2, garageFrontZ + 0.35)
-  for (let i = 1; i < 4; i++) {
-    add(house, dblW * 0.82, 0.035, 0.03, solid(0xd4d1c8, 0.9), dblX, (dblH * i) / 4, garageFrontZ + 0.28)
+  if (sideEntry) {
+    // Two-car doors on the outer side wall (local +x) — driveway meets here
+    const sideDoorX = garageX + garageW / 2 + 0.08
+    const sideDoorZ = garageZ - garageDepth * 0.08
+    const sideDoor = add(house, 0.12, dblH, dblW * 1.15, doorWhite, sideDoorX, dblH / 2, sideDoorZ)
+    sideDoor.rotation.y = 0
+    for (let i = 1; i < 4; i++) {
+      add(
+        house,
+        0.03,
+        0.035,
+        dblW * 1.05,
+        solid(0xd4d1c8, 0.9),
+        sideDoorX + 0.04,
+        (dblH * i) / 4,
+        sideDoorZ
+      )
+    }
+    // Quiet street face on the double bay (window, not a vehicle door)
+    add(house, dblW * 0.45, 1.2, 0.08, glass, dblX, wallH * 0.55, garageFrontZ + 0.35)
+    add(house, dblW * 0.52, 1.35, 0.06, trim, dblX, wallH * 0.55, garageFrontZ + 0.4)
+  } else {
+    add(house, dblW * 0.9, dblH, 0.12, doorWhite, dblX, dblH / 2, garageFrontZ + 0.35)
+    for (let i = 1; i < 4; i++) {
+      add(house, dblW * 0.82, 0.035, 0.03, solid(0xd4d1c8, 0.9), dblX, (dblH * i) / 4, garageFrontZ + 0.28)
+    }
+    // Gable window over double garage
+    add(house, 0.5, 1.0, 0.08, glass, dblX, wallH + roofRise * 0.22, garageFrontZ + 0.4)
+    add(house, 0.62, 1.12, 0.06, trim, dblX, wallH + roofRise * 0.22, garageFrontZ + 0.45)
   }
-  // Gable window over double garage
-  add(house, 0.5, 1.0, 0.08, glass, dblX, wallH + roofRise * 0.22, garageFrontZ + 0.4)
-  add(house, 0.62, 1.12, 0.06, trim, dblX, wallH + roofRise * 0.22, garageFrontZ + 0.45)
 
   // --- Timber entry (center) ---
   const porchD = 3.0
@@ -307,17 +335,22 @@ export function buildWhitestoneHouse(): THREE.Group {
   add(house, 1.7, 1.4, 0.08, trim, livingX - livingW * 0.2, 1.6, D / 2 - 0.1)
   add(house, 1.55, 1.25, 0.05, glass, livingX - livingW * 0.2, 1.6, D / 2 - 0.04)
 
-  // Driveway tip at garage doors (street-view left = local +x)
-  const doorX = (rvX + dblX) / 2
+  // Driveway tip — front doors on street face, or side doors on outer wall
+  const doorX = sideEntry ? garageX + garageW / 2 + 0.9 : (rvX + dblX) / 2
+  const doorZ = sideEntry ? garageZ - garageDepth * 0.08 : garageFrontZ
   const approach = new THREE.Object3D()
   approach.name = 'massingGarageDoor'
-  approach.position.set(doorX, 0, garageFrontZ)
+  approach.position.set(doorX, 0, doorZ)
   house.add(approach)
   house.userData.garageLocalX = doorX
-  house.userData.garageLocalZ = garageFrontZ
+  house.userData.garageLocalZ = doorZ
 
-  // Flush threshold — driveway meets here cleanly
-  add(house, garageW * 0.95, 0.05, 0.8, concrete, garageX, 0.025, garageFrontZ - 0.38)
+  // Flush threshold under the doors the driveway serves
+  if (sideEntry) {
+    add(house, 0.8, 0.05, dblW * 1.2, concrete, doorX - 0.35, 0.025, doorZ)
+  } else {
+    add(house, garageW * 0.95, 0.05, 0.8, concrete, garageX, 0.025, garageFrontZ - 0.38)
+  }
 
   house.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
@@ -336,10 +369,10 @@ export function applyWhitestoneSkins(
   _rear?: THREE.Texture | null
 ): void {}
 
-export const whitestoneFootprintFt = { width: W_FT, depth: D_FT }
+export const whitestoneFootprintFt = { width: W_FT, depth: D_FRONT_FT }
 export const whitestoneFootprintM = {
   wM: W_FT * FT_TO_M,
-  dM: D_FT * FT_TO_M,
+  dM: D_FRONT_FT * FT_TO_M,
 }
 /** Viewer-space garage center (−0.5 left … +0.5 right). Left wing ⇒ negative. */
 export const whitestoneGarageXFrac = -0.28

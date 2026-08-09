@@ -266,8 +266,11 @@ export default function StudioCanvas({
     massingRef.current = house
     anchor.visible = true
 
-    // Whitestone is geometry-only 3D (no photo planes — those always look like cards).
-    const isWhitestone = planId === 'whitestone-front' || planId === 'whitestone'
+    // Whitestone (front or side) is geometry-only 3D — no photo planes.
+    const isWhitestone =
+      planId === 'whitestone-front' ||
+      planId === 'whitestone-side' ||
+      planId === 'whitestone'
     if (isWhitestone) {
       texUrlRef.current = `massing:${planId}`
       syncTransform()
@@ -411,14 +414,16 @@ export default function StudioCanvas({
     onYawSuggest(yawDeg)
     yawRef.current = yawDeg
 
-    const isWhitestone = planId === 'whitestone-front' || planId === 'whitestone'
-    loadPlanHouse(
-      planId,
-      isWhitestone
-        ? `${plan.name} on the lot — 3D exterior (RV + garage on the left). Orbit to walk around; drag to move.`
-        : `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`,
-      true
-    )
+    const statusForPlan = () => {
+      if (planId === 'whitestone-side') {
+        return `${plan.name} (side-entry) — driveway meets the side garage doors; RV bay faces the street. Orbit; drag to move.`
+      }
+      if (planId === 'whitestone-front' || planId === 'whitestone') {
+        return `${plan.name} (front garage) — driveway meets the street-facing RV + two-car doors. Orbit; drag to move.`
+      }
+      return `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`
+    }
+    loadPlanHouse(planId, statusForPlan(), true)
   }, [planId, houseImageUrl, onStatus, onYawSuggest, onDrivewayChange, onLoadError])
 
   // Custom uploaded photo cutout
