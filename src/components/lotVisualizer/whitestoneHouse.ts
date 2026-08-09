@@ -468,8 +468,8 @@ function makeSkinPlane(
 }
 
 /** Paths for Whitestone exterior wraps (cleaned cutouts preferred). */
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy3'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy3'
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy4'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy4'
 
 function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
   tex.colorSpace = THREE.SRGBColorSpace
@@ -482,14 +482,20 @@ function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number):
   tex.offset.set(0, 0)
   tex.center.set(0.5, 0.5)
   tex.rotation = 0
+  tex.generateMipmaps = true
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.magFilter = THREE.LinearFilter
   const mat = mesh.material as THREE.MeshBasicMaterial
   mat.map?.dispose()
   mat.map = tex
+  // High alphaTest kills soft fringe so the foundation reads as a clean line
+  // against the driveway (no jagged rembg halo).
   mat.transparent = true
-  mat.alphaTest = 0.35
+  mat.alphaTest = 0.55
   mat.depthWrite = true
   mat.needsUpdate = true
   mesh.visible = true
+  mesh.renderOrder = 5
 
   const img = tex.image as HTMLImageElement | undefined
   if (img?.width && img.height) {
@@ -497,6 +503,7 @@ function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number):
     const faceStreet = !!mesh.userData.isStreetFacade
     mesh.scale.set(widthM, h, 1)
     if (faceStreet) mesh.rotation.y = Math.PI
+    // Sit the elevation on the ground plane — bottom texel row = foundation
     mesh.position.y = h / 2
   }
 }
@@ -524,7 +531,9 @@ export function applyWhitestoneSkins(
     hideStreetOccluders(house)
   }
   if (rear && rearMesh) {
-    rearMesh.position.z = D / 2 + 0.35
+    // Keep rear skin ahead of all rear massing so windows/gables cannot
+    // z-fight through the photoreal elevation (looks "garbled").
+    rearMesh.position.z = D / 2 + 0.75
     applySkinTexture(rearMesh, rear, W)
     hideRearOccluders(house)
   }
@@ -571,20 +580,23 @@ function hideRearOccluders(house: THREE.Group): void {
   house.getWorldQuaternion(q)
   const inv = q.clone().invert()
   const tmp = new THREE.Vector3()
-  const rearLimit = (house.userData.depthM as number) * 0.28
+  // Hide anything whose center sits in the rear third — the skin carries
+  // the glass-gable elevation (and must not show ArchyBase leftovers on
+  // nested window/door meshes).
+  const rearLimit = (house.userData.depthM as number) * 0.1
 
   house.traverse((o) => {
     if (!(o as THREE.Mesh).isMesh) return
     if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
     o.getWorldPosition(tmp)
-    const local = tmp.sub(origin).applyQuaternion(inv)
+    const local = tmp.clone().sub(origin).applyQuaternion(inv)
     if (local.z < rearLimit) return
     const geo = (o as THREE.Mesh).geometry
     if (!geo.boundingBox) geo.computeBoundingBox()
     const bb = geo.boundingBox
     if (!bb) return
     const depth = bb.max.z - bb.min.z
-    if (depth < 3.2) o.visible = false
+    if (depth < 8) o.visible = false
   })
 }
 
