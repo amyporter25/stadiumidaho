@@ -465,8 +465,8 @@ function makeSkinPlane(
 }
 
 /** Paths for Whitestone exterior wraps (cleaned cutouts preferred). */
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png'
+export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=archy1'
+export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=archy1'
 
 function applySkinTexture(mesh: THREE.Mesh, tex: THREE.Texture, widthM: number): void {
   tex.colorSpace = THREE.SRGBColorSpace
@@ -505,10 +505,35 @@ export function applyWhitestoneSkins(
     applySkinTexture(frontMesh, front, W)
     house.userData.facadeHeightM = frontMesh.scale.y
     house.userData.hasPhotorealSkins = true
+    // Skins carry the street-facing detail; keep massing for sides/orbit depth.
+    hideFrontDetailMeshes(house)
   }
   if (rear && rearMesh) {
     applySkinTexture(rearMesh, rear, W)
   }
+}
+
+/** Hide thin front-facing props that double up under the photoreal street skin. */
+function hideFrontDetailMeshes(house: THREE.Group): void {
+  const frontZ = -(house.userData.depthM as number) * 0.35
+  house.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return
+    if (o.name === 'streetFacade' || o.name === 'rearFacade' || o.name === 'footprintPad') return
+    // Only hide near-street thin accents (doors/windows/lights), not wing volumes
+    const z = o.position.z
+    if (z > frontZ) return
+    const geo = (o as THREE.Mesh).geometry
+    if (!geo?.boundingBox) geo.computeBoundingBox()
+    const bb = geo.boundingBox
+    if (!bb) return
+    const depth = bb.max.z - bb.min.z
+    const width = bb.max.x - bb.min.x
+    const height = bb.max.y - bb.min.y
+    // Paneled doors, window boxes, light arms — shallow relative to footprint
+    if (depth < 0.35 && width < (house.userData.widthM as number) * 0.55 && height < 5.5) {
+      o.visible = false
+    }
+  })
 }
 
 export const whitestoneFootprintFt = { width: W_FT, depth: D_FT }
