@@ -313,11 +313,40 @@ function addDoorNode(
   }
 }
 
+function addElevationSheet(
+  house: THREE.Group,
+  name: string,
+  faceStreet: boolean,
+  widthM: number,
+  depthM: number,
+  heightM: number
+): void {
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.62,
+    metalness: 0.02,
+    transparent: true,
+    alphaTest: 0.38,
+    depthWrite: true,
+    side: THREE.FrontSide,
+  })
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material)
+  mesh.name = name
+  mesh.userData.isElevationSheet = true
+  mesh.visible = false
+  if (faceStreet) mesh.rotation.y = Math.PI
+  mesh.scale.set(widthM, heightM, 1)
+  mesh.position.set(0, heightM / 2, faceStreet ? -depthM / 2 - 0.04 : depthM / 2 + 0.04)
+  house.add(mesh)
+}
+
 function finishHouse(house: THREE.Group, W: number, D: number): THREE.Group {
   house.userData.widthM = W
   house.userData.depthM = D
   house.userData.glbReady = true
   house.userData.hasPhotorealSkins = false
+  addElevationSheet(house, 'frontElevationSheet', true, W, D, 8.2)
+  addElevationSheet(house, 'rearElevationSheet', false, W, D, 8.2)
   house.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
       o.castShadow = true
@@ -578,6 +607,28 @@ export function applyBuilderElevations(
   }
   prep(front)
   if (rear) prep(rear)
+
+  const D = house.userData.depthM as number
+  const bindSheet = (
+    name: string,
+    tex: THREE.Texture | null | undefined,
+    faceStreet: boolean
+  ) => {
+    const sheet = house.getObjectByName(name) as THREE.Mesh | undefined
+    if (!sheet || !tex) return
+    const material = sheet.material as THREE.MeshStandardMaterial
+    material.map = tex
+    material.transparent = true
+    material.alphaTest = 0.38
+    material.depthWrite = true
+    material.needsUpdate = true
+    sheet.visible = true
+    sheet.scale.set(W, elevH, 1)
+    sheet.position.set(0, elevH / 2, faceStreet ? -D / 2 - 0.04 : D / 2 + 0.04)
+    if (faceStreet) sheet.rotation.y = Math.PI
+  }
+  bindSheet('frontElevationSheet', front, true)
+  bindSheet('rearElevationSheet', rear, false)
 
   house.updateMatrixWorld(true)
   const v = new THREE.Vector3()
