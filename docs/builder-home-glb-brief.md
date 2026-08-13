@@ -86,6 +86,15 @@ For each plan, deliver:
 
 ---
 
-## Contact / questions
+## In-repo models (generated)
 
-Please confirm timeline, quote per plan, and whether you prefer working from CAD export (Revit / Archicad / SketchUp / ArchyBase) vs modeling from PDF + elevations. CAD export + cleanup is preferred if Blackstone can supply source files.
+These GLBs are built from the construction PDFs + ArchyBase elevations already in `public/plans/`:
+
+```
+npm run glb:export
+```
+
+Outputs: `public/plans/glb/whitestone-front.glb`, `whitestone-side.glb`, `brownstone.glb`.
+
+Lot Studio loads those GLBs, then stamps the photoreal front/rear elevations onto the **wall faces** (not a floating photo card). Driveway attach uses `GarageDoorFront` / `GarageDoorSide`.
+

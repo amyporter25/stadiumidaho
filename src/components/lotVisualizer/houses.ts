@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { FT_TO_M } from './geo'
 import { getPlan } from '../../data/plans'
-import { buildWhitestoneHouse } from './whitestoneHouse'
+import { buildBuilderHome } from './builderHomes'
 
 /**
  * Recognizable 3D massings for Blackstone plans.
@@ -289,19 +289,18 @@ function resolveSpec(planId: string): HouseSpec {
   return SPECS[planId] ?? SPECS.brownstone
 }
 
-function isWhitestone(planId: string): boolean {
+function isBuilderHome(planId: string): boolean {
   return (
     planId === 'whitestone-front' ||
     planId === 'whitestone-side' ||
-    planId === 'whitestone'
+    planId === 'whitestone' ||
+    planId === 'brownstone'
   )
 }
 
 export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.Group {
-  // Dedicated Whitestone exterior — front- or side-entry garage per plan
-  if (isWhitestone(planId)) {
-    const entry = planId === 'whitestone-side' ? 'side' : 'front'
-    return buildWhitestoneHouse(entry)
+  if (isBuilderHome(planId)) {
+    return buildBuilderHome(planId)
   }
 
   const facadeMode = !!opts.facadeMode
@@ -491,15 +490,13 @@ export function buildHouse(planId: string, opts: BuildHouseOptions = {}): THREE.
 }
 
 /**
- * Studio house: plan footprint massing.
- * Whitestone ships its own front/rear elevation skins on the shell.
- * Other plans may get a street-facade plane for a marketing cutout.
+ * Studio house: plan footprint massing with real gabled volumes.
+ * Photoreal elevations are stamped onto wall faces (not a floating card).
  */
 export function buildStudioHouse(planId: string): THREE.Group {
   const house = buildHouse(planId, { facadeMode: true })
 
-  // Whitestone owns streetFacade + rearFacade — don't add a second card
-  if (isWhitestone(planId)) {
+  if (isBuilderHome(planId) || house.userData.glbReady) {
     return house
   }
 
@@ -570,7 +567,11 @@ export function applyFacadeTexture(house: THREE.Group, tex: THREE.Texture): void
  * front of the house — from the side/rear the plan massing reads as solid 3D
  * without a floating photo card.
  */
+export { applyBuilderElevations, PLAN_ELEVATIONS, PLAN_GLB_URL, builderHomeMeta } from './builderHomes'
+
 export function updateFacadeFacing(house: THREE.Group, camera: THREE.Camera): void {
+  // Builder homes stamp elevations onto wall faces — never hide the house.
+  if (house.userData.glbReady || house.userData.hasPhotorealSkins) return
   const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
   if (!facade || !facade.userData.isStreetFacade) return
   // Whitestone elevation skins stay fully opaque while you're on the street

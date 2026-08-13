@@ -10,15 +10,15 @@ import {
 } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
 import {
+  applyBuilderElevations,
   applyFacadeTexture,
   buildStudioHouse,
+  builderHomeMeta,
+  PLAN_ELEVATIONS,
+  PLAN_GLB_URL,
   updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
-import {
-  applyWhitestoneSkins,
-  WHITESTONE_FRONT_SKIN,
-  WHITESTONE_REAR_SKIN,
-} from '../components/lotVisualizer/whitestoneHouse'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -265,49 +265,92 @@ export default function StudioCanvas({
     clearMassing()
     if (cutoutRef.current) cutoutRef.current.visible = false
 
-    const house = buildStudioHouse(planId)
-    house.visible = true
-    anchor.add(house)
-    massingRef.current = house
-    anchor.visible = true
-
-    // Whitestone: 3D shell + photoreal front/rear elevation skins
-    const isWhitestone =
-      planId === 'whitestone-front' ||
-      planId === 'whitestone-side' ||
-      planId === 'whitestone'
-    if (isWhitestone) {
-      texUrlRef.current = WHITESTONE_FRONT_SKIN
+    const finishElevations = (house: THREE.Group) => {
+      const elev = PLAN_ELEVATIONS[planId]
+      if (!elev) {
+        texUrlRef.current = `massing:${planId}`
+        syncTransform()
+        if (frameView) frameHouseStreetView()
+        onStatus(statusMsg)
+        return
+      }
+      texUrlRef.current = elev.front
       const loader = new THREE.TextureLoader()
-      const finish = () => {
+      const done = () => {
         syncTransform()
         if (frameView) frameHouseStreetView()
         onStatus(statusMsg)
       }
       loader.load(
-        WHITESTONE_FRONT_SKIN,
+        elev.front,
         (frontTex) => {
+          if (!elev.rear) {
+            applyBuilderElevations(house, frontTex, null)
+            done()
+            return
+          }
           loader.load(
-            WHITESTONE_REAR_SKIN,
+            elev.rear,
             (rearTex) => {
-              applyWhitestoneSkins(house, frontTex, rearTex)
-              finish()
+              applyBuilderElevations(house, frontTex, rearTex)
+              done()
             },
             undefined,
             () => {
-              applyWhitestoneSkins(house, frontTex, null)
-              finish()
+              applyBuilderElevations(house, frontTex, null)
+              done()
             }
           )
         },
         undefined,
+        () => done()
+      )
+    }
+
+    const seatHouse = (house: THREE.Group) => {
+      house.visible = true
+      house.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) {
+          o.castShadow = true
+          o.receiveShadow = true
+        }
+      })
+      anchor.add(house)
+      massingRef.current = house
+      anchor.visible = true
+      finishElevations(house)
+    }
+
+    const glbUrl = PLAN_GLB_URL[planId]
+    if (glbUrl) {
+      new GLTFLoader().load(
+        glbUrl,
+        (gltf) => {
+          const house = gltf.scene
+          const meta = builderHomeMeta(planId)
+          house.name = `house-${planId}`
+          Object.assign(house.userData, meta, { planId, glbReady: true })
+          seatHouse(house)
+        },
+        undefined,
         () => {
-          // Skins missing — massing alone still places on the lot
-          finish()
+          const house = buildStudioHouse(planId)
+          seatHouse(house)
         }
       )
       return
     }
+
+    const house = buildStudioHouse(planId)
+    if (PLAN_ELEVATIONS[planId]) {
+      seatHouse(house)
+      return
+    }
+
+    house.visible = true
+    anchor.add(house)
+    massingRef.current = house
+    anchor.visible = true
 
     const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
     if (!facade || !plan.cutoutImg) {
@@ -446,12 +489,12 @@ export default function StudioCanvas({
 
     const statusForPlan = () => {
       if (planId === 'whitestone-side') {
-        return `${plan.name} (side-entry) — real exterior on the 3D shell; driveway to the side garage doors. Orbit; drag to move.`
+        return `${plan.name} (side-entry) — 3D home; driveway to the side garage doors. Orbit; drag to move.`
       }
       if (planId === 'whitestone-front' || planId === 'whitestone') {
-        return `${plan.name} — real exterior on the 3D shell; driveway to the street-facing garage. Orbit; drag to move.`
+        return `${plan.name} — 3D home; driveway to the street-facing garage. Orbit; drag to move.`
       }
-      return `${plan.name} on the lot — 3D massing with the real front elevation. Orbit to see depth; drag to move.`
+      return `${plan.name} — 3D home on the lot. Orbit to walk around; drag to move.`
     }
     loadPlanHouse(planId, statusForPlan(), true)
   }, [planId, houseImageUrl, onStatus, onYawSuggest, onDrivewayChange, onLoadError])
@@ -733,8 +776,15 @@ export default function StudioCanvas({
       // World-space garage door for the active plan (front face or side wall).
       const massing = massingRef.current
       const anchor = anchorRef.current!
-      const doorMarker =
-        massing?.visible ? massing.getObjectByName('massingGarageDoor') : null
+      const sideFirst = massing?.userData.garageEntry === 'side'
+      const doorMarker = massing?.visible
+        ? sideFirst
+          ? massing.getObjectByName('GarageDoorSide') ||
+            massing.getObjectByName('GarageDoorFront') ||
+            massing.getObjectByName('massingGarageDoor')
+          : massing.getObjectByName('GarageDoorFront') ||
+            massing.getObjectByName('massingGarageDoor')
+        : null
       if (doorMarker) {
         doorMarker.getWorldPosition(worldDoor)
         worldDoor.y = 0
