@@ -13,12 +13,9 @@ import {
   applyBuilderElevations,
   applyFacadeTexture,
   buildStudioHouse,
-  builderHomeMeta,
   PLAN_ELEVATIONS,
-  PLAN_GLB_URL,
   updateFacadeFacing,
 } from '../components/lotVisualizer/houses'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -319,26 +316,6 @@ export default function StudioCanvas({
       massingRef.current = house
       anchor.visible = true
       finishElevations(house)
-    }
-
-    const glbUrl = PLAN_GLB_URL[planId]
-    if (glbUrl) {
-      new GLTFLoader().load(
-        glbUrl,
-        (gltf) => {
-          const house = gltf.scene
-          const meta = builderHomeMeta(planId)
-          house.name = `house-${planId}`
-          Object.assign(house.userData, meta, { planId, glbReady: true })
-          seatHouse(house)
-        },
-        undefined,
-        () => {
-          const house = buildStudioHouse(planId)
-          seatHouse(house)
-        }
-      )
-      return
     }
 
     const house = buildStudioHouse(planId)
