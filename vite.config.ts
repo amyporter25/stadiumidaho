@@ -9,7 +9,18 @@ import { inspectAttr } from 'plugin-inspect-react-code'
 export default defineConfig({
   plugins: [
     devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
-    inspectAttr(), react()],
+    inspectAttr(),
+    react(),
+    {
+      name: "allow-iframe-preview",
+      configureServer(server) {
+        server.middlewares.use((_req, res, next) => {
+          res.removeHeader("X-Frame-Options");
+          next();
+        });
+      },
+    },
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -26,5 +37,10 @@ export default defineConfig({
   server: {
     port: 3000,
     allowedHosts: true,
+    // Cursor Simple Browser and some preview iframes refuse SAMEORIGIN.
+    // Lot Studio is a local/dev preview, so allow embedding from any parent.
+    headers: {
+      "Content-Security-Policy": "frame-ancestors *",
+    },
   },
 });
