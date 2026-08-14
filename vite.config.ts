@@ -30,6 +30,8 @@ export default defineConfig({
     },
   },
   envDir: path.resolve(__dirname),
+  // GitHub Pages hosts this repo at /stadiumidaho/. Local/dev stays at /.
+  base: process.env.GITHUB_PAGES === "true" ? "/stadiumidaho/" : "/",
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,

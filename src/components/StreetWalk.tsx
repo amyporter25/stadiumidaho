@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { assetUrl } from '../lib/assetUrl'
 
 /**
  * StreetWalk — proof of concept for ground-level lot viewing.
@@ -26,7 +27,7 @@ interface StreetWalkProps {
 }
 
 export default function StreetWalk({
-  srcBase = '/walk/lot46',
+  srcBase = assetUrl('/walk/lot46'),
   eyebrow = 'Walk the street · proof of concept — lot 46, Yogi',
   blurb = 'This is real footage shot standing on the street in August 2026 — not a rendering. Drag across the image to walk down the street and look around, exactly the way you would standing there.',
 }: StreetWalkProps) {

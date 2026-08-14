@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { trpc } from '@/providers/trpc'
+import { assetUrl } from '@/lib/assetUrl'
 import { homePlans } from '../../data/plans'
 import {
   makeFrame,
@@ -75,7 +76,7 @@ const VANTAGE_M = 7.5 // ~25 ft — second-story height above the street
  * rotationY turns the panorama's horizon into the lot's compass frame
  * (radians, counter-clockwise looking down — tune once per pano). */
 const SKY_WORLDS: Record<string, { url: string; rotationY: number }> = {
-  '46/3': { url: '/sky/lot46.jpg', rotationY: (-74.9 * Math.PI) / 180 },
+  '46/3': { url: assetUrl('/sky/lot46.jpg'), rotationY: (-74.9 * Math.PI) / 180 },
 }
 
 export default function LotVisualizer({ lotName, center, polygon, facing, neighbors = [] }: LotVisualizerProps) {

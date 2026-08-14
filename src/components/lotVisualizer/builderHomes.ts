@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { assetUrl } from '../../lib/assetUrl'
 import { FT_TO_M } from './geo'
 
 /**
@@ -12,10 +13,10 @@ import { FT_TO_M } from './geo'
  */
 
 export const PLAN_GLB_URL: Record<string, string> = {
-  'whitestone-front': '/plans/glb/whitestone-front.glb',
-  whitestone: '/plans/glb/whitestone-front.glb',
-  'whitestone-side': '/plans/glb/whitestone-side.glb',
-  brownstone: '/plans/glb/brownstone.glb',
+  'whitestone-front': assetUrl('/plans/glb/whitestone-front.glb'),
+  whitestone: assetUrl('/plans/glb/whitestone-front.glb'),
+  'whitestone-side': assetUrl('/plans/glb/whitestone-side.glb'),
+  brownstone: assetUrl('/plans/glb/brownstone.glb'),
 }
 
 export function builderHomeMeta(planId: string): {
@@ -37,19 +38,19 @@ export const PLAN_ELEVATIONS: Record<
   { front: string; rear: string | null }
 > = {
   'whitestone-front': {
-    front: '/plans/refs/whitestone-front.png?v=glb1',
-    rear: '/plans/refs/whitestone-rear.png?v=glb1',
+    front: assetUrl('/plans/refs/whitestone-front.png?v=glb1'),
+    rear: assetUrl('/plans/refs/whitestone-rear.png?v=glb1'),
   },
   whitestone: {
-    front: '/plans/refs/whitestone-front.png?v=glb1',
-    rear: '/plans/refs/whitestone-rear.png?v=glb1',
+    front: assetUrl('/plans/refs/whitestone-front.png?v=glb1'),
+    rear: assetUrl('/plans/refs/whitestone-rear.png?v=glb1'),
   },
   'whitestone-side': {
-    front: '/plans/refs/whitestone-front.png?v=glb1',
-    rear: '/plans/refs/whitestone-rear.png?v=glb1',
+    front: assetUrl('/plans/refs/whitestone-front.png?v=glb1'),
+    rear: assetUrl('/plans/refs/whitestone-rear.png?v=glb1'),
   },
   brownstone: {
-    front: '/plans/cutouts/brownstone.png?v=glb1',
+    front: assetUrl('/plans/cutouts/brownstone.png?v=glb1'),
     rear: null,
   },
 }

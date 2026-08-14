@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { assetUrl } from '../lib/assetUrl'
 
 /* ------------------------------------------------------------------ */
 /* solar position — same approximation as the server                   */
@@ -106,8 +107,8 @@ export default function LotStandView({ lotName, center }: LotStandViewProps) {
         <div style={{ position: 'relative', width: '100%', height: 'clamp(360px, 55vh, 580px)', backgroundColor: '#111', overflow: 'hidden' }}>
           <video
             ref={videoRef}
-            src="/videos/stadium-road.mp4"
-            poster="/videos/stadium-poster.jpg"
+            src={assetUrl('/videos/stadium-road.mp4')}
+            poster={assetUrl('/videos/stadium-poster.jpg')}
             autoPlay
             muted
             loop

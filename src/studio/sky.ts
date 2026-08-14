@@ -1,7 +1,8 @@
 import * as THREE from 'three'
+import { assetUrl } from '../lib/assetUrl'
 
 /** Prefer the Phase 3 drone-derived sky when present; fall back to a painted clear sky. */
-const DRONE_SKY_URL = '/studio/phase3-sample/sky-equirect.jpg'
+const DRONE_SKY_URL = assetUrl('/studio/phase3-sample/sky-equirect.jpg')
 
 function paintProceduralSky(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { assetUrl } from '../../lib/assetUrl'
 import { FT_TO_M } from './geo'
 
 /**
@@ -21,8 +22,8 @@ const D_SIDE_FT = 78
 export type WhitestoneEntry = 'front' | 'side'
 
 /** ArchyBase exterior cutouts — garage on image-left matches street-view left. */
-export const WHITESTONE_FRONT_SKIN = '/plans/refs/whitestone-front.png?v=look1'
-export const WHITESTONE_REAR_SKIN = '/plans/refs/whitestone-rear.png?v=look1'
+export const WHITESTONE_FRONT_SKIN = assetUrl('/plans/refs/whitestone-front.png?v=look1')
+export const WHITESTONE_REAR_SKIN = assetUrl('/plans/refs/whitestone-rear.png?v=look1')
 
 function solid(color: number, roughness = 0.85): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({

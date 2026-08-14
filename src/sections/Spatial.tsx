@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { assetUrl } from '../lib/assetUrl'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -59,8 +60,8 @@ export default function Spatial() {
     >
       <video
         ref={videoRef}
-        src="/videos/stadium-road.mp4"
-        poster="/videos/stadium-poster.jpg"
+        src={assetUrl('/videos/stadium-road.mp4')}
+        poster={assetUrl('/videos/stadium-poster.jpg')}
         autoPlay
         muted
         loop

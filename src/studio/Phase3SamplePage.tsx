@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router'
+import { assetUrl } from '../lib/assetUrl'
 
 /**
  * Sample preview from the real Phase 3 drone clip (DJI_0034.MP4).
@@ -12,10 +13,10 @@ export default function Phase3SamplePage() {
 
   const stills = useMemo(
     () => [
-      { src: '/studio/phase3-sample/aerial-02m.jpg', label: '~2 min · roads + pads' },
-      { src: '/studio/phase3-sample/aerial-05m.jpg', label: '~5 min · canal / dirt track' },
-      { src: '/studio/phase3-sample/aerial-08m.jpg', label: '~8 min · cul-de-sac + basin' },
-      { src: '/studio/phase3-sample/aerial-14m.jpg', label: '~14 min · lots + farmland' },
+      { src: assetUrl('/studio/phase3-sample/aerial-02m.jpg'), label: '~2 min · roads + pads' },
+      { src: assetUrl('/studio/phase3-sample/aerial-05m.jpg'), label: '~5 min · canal / dirt track' },
+      { src: assetUrl('/studio/phase3-sample/aerial-08m.jpg'), label: '~8 min · cul-de-sac + basin' },
+      { src: assetUrl('/studio/phase3-sample/aerial-14m.jpg'), label: '~14 min · lots + farmland' },
     ],
     []
   )
@@ -89,7 +90,7 @@ export default function Phase3SamplePage() {
           >
             <video
               ref={videoRef}
-              src="/studio/phase3-sample/flyover.mp4"
+              src={assetUrl('/studio/phase3-sample/flyover.mp4')}
               playsInline
               controls
               autoPlay

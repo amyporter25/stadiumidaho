@@ -1,0 +1,49 @@
+# Permanent Lot Studio preview at:
+#   https://amyporter25.github.io/stadiumidaho/studio?lot=46/3
+#
+# Cursor Cloud Agents run on an isolated VM. Their localhost:3000 is not
+# reachable from cursor.com or from Chrome on your laptop. This workflow
+# publishes a static build on every push so anyone can open the real app.
+name: Preview
+
+on:
+  push:
+    branches:
+      - main
+      - "cursor/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Build static site for GitHub Pages
+        run: npm run build
+        env:
+          GITHUB_PAGES: "true"
+      - name: SPA fallback for /studio routes
+        run: cp dist/public/index.html dist/public/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/public
+      - id: deployment
+        uses: actions/deploy-pages@v4

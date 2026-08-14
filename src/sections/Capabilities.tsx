@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
+import { assetUrl } from '../lib/assetUrl'
 
 const amenities: { label: string; detail: string }[] = [
   { label: '1+ Acre Homesites', detail: 'Real elbow room — space for shops, RV parking, pools, and play' },
@@ -35,8 +36,8 @@ export default function Capabilities() {
     >
       <video
         ref={videoRef}
-        src="/videos/stadium-road.mp4#t=4"
-        poster="/videos/stadium-poster.jpg"
+        src={`${assetUrl('/videos/stadium-road.mp4')}#t=4`}
+        poster={assetUrl('/videos/stadium-poster.jpg')}
         autoPlay
         muted
         loop

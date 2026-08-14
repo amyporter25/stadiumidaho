@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { assetUrl } from '../lib/assetUrl'
 
 interface FlyoverVideoProps {
   /** When set, copy references the specific lot page the visitor is on. */
@@ -55,8 +56,8 @@ export default function FlyoverVideo({ lotName }: FlyoverVideoProps) {
         >
           <video
             ref={videoRef}
-            src="/videos/stadium-flyover.mp4"
-            poster="/videos/stadium-flyover-poster.jpg"
+            src={assetUrl('/videos/stadium-flyover.mp4')}
+            poster={assetUrl('/videos/stadium-flyover-poster.jpg')}
             autoPlay
             muted
             loop

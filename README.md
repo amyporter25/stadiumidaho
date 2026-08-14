@@ -1,4 +1,14 @@
+# Stadium Idaho
+
+Lot Studio (3D lot + builder homes) lives at `/studio`.
+
+**Live preview (always up after each push):**  
+https://amyporter25.github.io/stadiumidaho/studio?lot=46/3
+
+How to preview from Cursor, Desktop, or your laptop: [docs/preview.md](docs/preview.md)
+
 # Video Hotel Fullstack Template
+
 
 A fullstack landing page for a luxury seaside hotel named **LUNAMARE**. Full-viewport video hero, a rooms & residences gallery with per-room detail pages, a services section on a second video, and a split shader / booking-form finale. Fullstack-wired reservation flow, Kimi auth, and a relational database.
 

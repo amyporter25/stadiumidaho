@@ -1,3 +1,5 @@
+import { assetUrl } from '../lib/assetUrl'
+
 export type GarageEntry = 'front' | 'side'
 
 export interface HomePlan {
@@ -38,7 +40,7 @@ export interface HomePlan {
  * Specs read from Risen Home Design / Blackstone construction PDFs
  * in public/plans/. Photo upload remains available as a custom path.
  */
-export const homePlans: HomePlan[] = [
+const RAW_PLANS: HomePlan[] = [
   {
     id: 'brownstone',
     name: 'The Brownstone',
@@ -122,6 +124,18 @@ export const homePlans: HomePlan[] = [
     footprintFt: { width: 94, depth: 78 },
   },
 ]
+
+function withPublicAssets(plan: HomePlan): HomePlan {
+  return {
+    ...plan,
+    elevationImg: assetUrl(plan.elevationImg),
+    cutoutImg: assetUrl(plan.cutoutImg),
+    floorplanImg: assetUrl(plan.floorplanImg),
+    pdfUrl: assetUrl(plan.pdfUrl),
+  }
+}
+
+export const homePlans: HomePlan[] = RAW_PLANS.map(withPublicAssets)
 
 /** Plans shown in Lot Studio’s one-click catalog (same as marketing for now). */
 export const studioPlans = homePlans

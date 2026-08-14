@@ -1,0 +1,17 @@
+{
+  "name": "Stadium Idaho",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "Lot Studio",
+      "command": "npm run dev -- --host 0.0.0.0 --port 3000",
+      "description": "Vite + API on port 3000. Cursor Desktop forwards this to the user's localhost via the plug icon. Chat on cursor.com cannot open this URL — use the GitHub Pages preview instead."
+    }
+  ],
+  "ports": [
+    {
+      "name": "Lot Studio",
+      "port": 3000
+    }
+  ]
+}
