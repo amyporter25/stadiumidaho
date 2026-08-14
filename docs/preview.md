@@ -1,42 +1,48 @@
 # How to preview Lot Studio
 
-Cloud Agent chats on [cursor.com](https://cursor.com/agents) **cannot** open
-`http://localhost:3000`. That address is the agent’s remote VM, not your
-laptop. Temporary tunnels (localtunnel, Pinggy, Cloudflare) also fail in
-Cursor’s built-in browser. Use one of the paths below instead.
+This Cloud Agent runs Lot Studio on a **remote VM**. `http://localhost:3000`
+on that VM is not the same as `localhost` on your laptop. Clicking a
+`localhost` link in chat opens **your** machine, which is why Chrome shows
+connection refused (−102) even in Cursor Desktop.
 
-## 1. Permanent public preview (use this)
+Use one of the paths below.
 
-After GitHub Actions finishes, the live app is:
+## 1. Cursor Desktop — live preview (port forward)
+
+You must be in the **Agents Window**, connected to **this** cloud agent,
+not only in the classic editor / Composer panel.
+
+1. `Ctrl+Shift+P` (Windows) or `Cmd+Shift+P` (Mac) → **Open Agents Window**
+2. Select this cloud agent in the sidebar so its tab is active
+3. Look for the **plug icon** at the top-right of the editor panel
+4. Click it → turn **Auto-Forward Ports** on if it is off
+5. If port **3000** is missing, **manually forward 3000**
+6. In that same plug menu, **open the forwarded port in the built-in browser**
+
+Then go to `/studio?lot=46/3`.
+
+Do **not** paste `http://localhost:3000` into system Chrome unless the plug
+menu shows 3000 forwarded to your laptop. If local 3000 was already in use,
+Cursor may map the VM to a **random** local port — the plug menu is the
+source of truth.
+
+Vite is started from `.cursor/environment.json` `terminals`. Cursor does not
+always auto-detect those, so the manual forward step is expected.
+
+## 2. Permanent public URL (no plug icon)
+
+After GitHub Actions finishes:
 
 **https://amyporter25.github.io/stadiumidaho/studio?lot=46/3**
 
-Open that in Chrome or Safari. Orbit the house, switch Whitestone front vs
-side-entry, move it on the lot. Every push to `main` or a `cursor/**` branch
+Open that in Chrome or Safari. Every push to `main` or a `cursor/**` branch
 updates this same URL.
 
 ### One-time GitHub setting (required once)
 
-GitHub will not publish the site until Pages is turned on. This is a 15-second
-repo setting, not something the agent can flip:
-
 1. Open **https://github.com/amyporter25/stadiumidaho/settings/pages**
 2. Under **Build and deployment → Source**, choose **GitHub Actions**
 3. Open **https://github.com/amyporter25/stadiumidaho/actions/workflows/preview.yml** and click **Run workflow**
-
-After that, the URL above stays live and updates on every push. You will not
-need tunnels, localhost, or Cursor’s built-in browser.
-
-## 2. Cursor Desktop (live server on the agent)
-
-If you open this agent from **Cursor Desktop** (not the website):
-
-1. Wait until the **Lot Studio** terminal is running
-2. Click the **plug icon** (forwarded ports) in the editor
-3. Open the forwarded port in the built-in browser, or
-   `http://localhost:3000/studio?lot=46/3` in Chrome
-
-This does **not** work from cursor.com in a regular browser tab.
 
 ## 3. Run it on your own machine
 
