@@ -15,11 +15,17 @@ Open that in Chrome or Safari. Orbit the house, switch Whitestone front vs
 side-entry, move it on the lot. Every push to `main` or a `cursor/**` branch
 updates this same URL.
 
-### One-time GitHub setting (only if that link 404s)
+### One-time GitHub setting (required once)
 
-1. Open https://github.com/amyporter25/stadiumidaho/settings/pages
+GitHub will not publish the site until Pages is turned on. This is a 15-second
+repo setting, not something the agent can flip:
+
+1. Open **https://github.com/amyporter25/stadiumidaho/settings/pages**
 2. Under **Build and deployment → Source**, choose **GitHub Actions**
-3. Re-run the **Preview** workflow if needed
+3. Open **https://github.com/amyporter25/stadiumidaho/actions/workflows/preview.yml** and click **Run workflow**
+
+After that, the URL above stays live and updates on every push. You will not
+need tunnels, localhost, or Cursor’s built-in browser.
 
 ## 2. Cursor Desktop (live server on the agent)
 

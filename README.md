@@ -5,7 +5,7 @@ Lot Studio (3D lot + builder homes) lives at `/studio`.
 **Live preview (always up after each push):**  
 https://amyporter25.github.io/stadiumidaho/studio?lot=46/3
 
-How to preview from Cursor, Desktop, or your laptop: [docs/preview.md](docs/preview.md)
+First time only: GitHub repo **Settings → Pages → Source → GitHub Actions**, then re-run the Preview workflow. Details: [docs/preview.md](docs/preview.md)
 
 # Video Hotel Fullstack Template
 
