@@ -37,10 +37,17 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    host: "0.0.0.0",
     port: 3000,
+    strictPort: true,
     allowedHosts: true,
+    cors: true,
+    // Cursor Desktop maps this VM to the user's localhost. Pin HMR to the
+    // same port so the client does not try a hostname the laptop cannot reach.
+    hmr: {
+      clientPort: 3000,
+    },
     // Cursor Simple Browser and some preview iframes refuse SAMEORIGIN.
-    // Lot Studio is a local/dev preview, so allow embedding from any parent.
     headers: {
       "Content-Security-Policy": "frame-ancestors *",
     },
