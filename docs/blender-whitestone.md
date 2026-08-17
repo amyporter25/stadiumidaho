@@ -10,6 +10,29 @@ script loads images from `public/plans/`.
 
 ---
 
+## Session 2 — gabled 3D house (the standing photo goes away)
+
+The front picture is a tracing overlay, not the house. This script replaces
+the scene with gabled volumes you can orbit.
+
+In Terminal:
+
+```bash
+cd ~/stadiumidaho
+git pull origin cursor/lot-studio-track-b-3c2b
+/Applications/Blender.app/Contents/MacOS/Blender --python ~/stadiumidaho/scripts/blender_whitestone_gables.py
+```
+
+You should see cream walls, dark roofs, a tall RV garage and a two-car garage
+on the street-left, and a small porch — **no flat photo standing in the air**.
+
+Orbit with the middle mouse. This is still a massing (no photoreal siding yet).
+If the roofs look like a house when you spin it, we did the right step.
+
+**Save:** File → Save As → `whitestone-front.blend`
+
+---
+
 ## Session 1 — scene that already has the right scale
 
 1. Install Blender. Open it once and quit the splash screen (click anywhere).
