@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
+    "build:pages": "GITHUB_PAGES=true vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/boot.js",
@@ -21,6 +22,7 @@
     "@aws-sdk/s3-request-presigner": "^3.965.0",
     "@hono/node-server": "^1.14.3",
     "@hookform/resolvers": "^5.2.2",
+    "@imgly/background-removal": "^1.7.0",
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { assetUrl } from '../lib/assetUrl'
 
 /**
  * Interactive 3D capture of The Stadium — a Gaussian splat built from the
@@ -49,7 +50,7 @@ export default function StadiumSplat() {
           ignoreDevicePixelRatio: false,
           sharedMemoryForWorkers: false,
         })
-        await viewer.addSplatScene('/splats/stadium.ksplat', {
+        await viewer.addSplatScene(assetUrl('/splats/stadium.ksplat'), {
           progressiveLoad: false,
           showLoadingUI: true,
         })

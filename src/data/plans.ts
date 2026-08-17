@@ -1,82 +1,145 @@
+import { assetUrl } from '../lib/assetUrl'
+
+export type GarageEntry = 'front' | 'side'
+
 export interface HomePlan {
   id: string
   name: string
+  subtitle: string
   builder: string
+  /** Picker / catalog card (full-scene marketing still, not a cutout) */
   elevationImg: string
+  /**
+   * Marketing cutout for picker cards and the custom photo-upload path.
+   * The 3D house on the lot comes from a vendor GLB, not this image.
+   */
+  cutoutImg: string
   floorplanImg: string
+  /** Full construction PDF (builder-supplied) */
+  pdfUrl: string
   livingArea: string
   beds: string
   baths: string
   garage: string
+  garageEntry: GarageEntry
+  /**
+   * Horizontal garage-door center on the front elevation, as a fraction of
+   * house width from center (−0.5 left … +0.5 right). Used so the driveway
+   * aims at the garage, not the front door.
+   */
+  garageXFrac: number
   porches: string[]
   highlights: string[]
-  // Approximate building footprint, from the dimensioned floor plan —
-  // used to scale the plan on a lot in the future visualizer.
+  // Approximate building footprint from the dimensioned floor plan —
+  // used to scale the massing on a lot in the visualizer.
   footprintFt: { width: number; depth: number }
 }
 
-// Plans offered by the community's builders. Specs read from the
-// builder-supplied floor plans; verify against the builder's current
-// spec sheet before publishing pricing.
-export const homePlans: HomePlan[] = [
+/**
+ * Builder plans we offer buyers to drop onto a Stadium lot.
+ * Specs read from Risen Home Design / Blackstone construction PDFs
+ * in public/plans/. Photo upload remains available as a custom path.
+ */
+const RAW_PLANS: HomePlan[] = [
   {
     id: 'brownstone',
     name: 'The Brownstone',
+    subtitle: 'Front-facing garage + RV bay',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/brownstone-elevation.jpg',
-    floorplanImg: '/plans/brownstone-floorplan.png',
-    livingArea: '2,882 sq ft',
-    beds: '3 bedrooms + pocket office',
-    baths: '2.5 baths',
-    garage: 'Two garages: 25′-6″ × 28′-11″ + 17′ × 49′ RV bay',
-    porches: ['Front porch 11′-11″ × 14′-4″', 'Rear porch 11′ × 11′-10″'],
+    elevationImg: '/plans/cards/brownstone.jpg?v=cards1',
+    cutoutImg: '/plans/cutouts/brownstone.png?v=drive10',
+    floorplanImg: '/plans/thumbs/brownstone-floorplan.jpg',
+    pdfUrl: '/plans/brownstone-15-2-rwr.pdf',
+    livingArea: '~2,880 sq ft living',
+    beds: '4 bedrooms + tech room',
+    baths: '3.5 baths',
+    garage: 'Garage + tall RV bay (both front-facing)',
+    garageEntry: 'front',
+    // Marketing elevation: garage door sits on the far right
+    garageXFrac: 0.38,
+    porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
-      '16′ × 17′-4″ great room open to kitchen and dining',
-      'Master suite with safe room and walk-in closet',
-      'Pocket office off the entry',
+      'Great room open to kitchen and dining',
+      'Master suite with walk-in closet',
+      'Tech room / flex space off the entry',
       'Mudroom and walk-in pantry',
-      '49-foot RV-height garage bay',
+      'Front-facing garage with dedicated RV bay',
     ],
-    footprintFt: { width: 96, depth: 78 },
+    // Overall exterior from floor plan sheets (~91′ × ~72′)
+    footprintFt: { width: 91, depth: 72 },
   },
   {
-    id: 'whitestone',
+    id: 'whitestone-front',
     name: 'The Whitestone',
+    subtitle: 'Front-facing garage + RV (left)',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/whitestone-elevation.jpg',
-    floorplanImg: '/plans/whitestone-floorplan.png',
-    livingArea: '2,141 sq ft',
-    beds: '2 bedrooms + office/bedroom',
+    elevationImg: '/plans/cards/whitestone-front.jpg?v=cards1',
+    cutoutImg: '/plans/cutouts/whitestone.png?v=drive10',
+    floorplanImg: '/plans/thumbs/whitestone-front-floorplan.jpg',
+    pdfUrl: '/plans/whitestone-7-2-rwr.pdf',
+    livingArea: '~2,140 sq ft living',
+    beds: '3–4 bedrooms (office / flex)',
     baths: '2.5 baths',
-    garage: 'Two garages: 21′ × 33′-6″ + 17′ × 49′ RV bay',
-    porches: ['Front porch 22′-6″ × 9′-10″', 'Rear porch 35′ × 10′-10″'],
+    garage: 'Tall RV bay + two-car garage (both front-facing, street-left)',
+    garageEntry: 'front',
+    // Street-left garage wing (matches builder front elevation / ArchyBase refs)
+    garageXFrac: -0.28,
+    porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Modern farmhouse elevation with timber-truss entry',
-      '18′-2″ × 22′-1″ living room',
-      'Flexible office/third bedroom',
-      'Mud room with pet wash',
-      '35-foot covered rear porch',
+      'Great room with vaulted ceiling',
+      'Flexible office / third bedroom',
+      'Mud room with utility',
+      'Front-facing RV bay + two-car garage on the left',
     ],
-    footprintFt: { width: 94, depth: 82 },
+    footprintFt: { width: 94, depth: 70 },
   },
   {
-    id: 'sunstone',
-    name: 'The Sunstone',
+    id: 'whitestone-side',
+    name: 'The Whitestone',
+    subtitle: 'Side-entry garage',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/sunstone-elevation.png',
-    floorplanImg: '/plans/sunstone-floorplan.png',
-    livingArea: 'Approx. 2,500 sq ft',
-    beds: '2 bedrooms + office + guest suite',
-    baths: '3 baths',
-    garage: 'Garage + 16′ tall RV bay',
-    porches: ['Covered patio', 'Covered front porch'],
+    // Side-entry plan uses the same Whitestone marketing render until a
+    // dedicated side-entry exterior photo is supplied.
+    elevationImg: '/plans/cards/whitestone-side.jpg?v=cards1',
+    cutoutImg: '/plans/cutouts/whitestone.png?v=drive10',
+    floorplanImg: '/plans/thumbs/whitestone-side-floorplan.jpg',
+    pdfUrl: '/plans/whitestone-29-3-pse.pdf',
+    livingArea: '~2,140 sq ft living',
+    beds: '3–4 bedrooms (office / flex)',
+    baths: '2.5 baths',
+    garage: 'Side-entry two-car + front-facing tall RV bay',
+    garageEntry: 'side',
+    // Viewer-left garage wing; driveway aims at the side-yard two-car doors
+    garageXFrac: -0.42,
+    porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
-      'Stone-and-board-and-batten farmhouse elevation',
-      '16-foot tall RV bay with its own driveway approach',
-      'Dedicated office off the entry',
-      'Separate guest suite',
-      'Covered patio off the living room',
+      'Same Whitestone living layout, side-loaded garage',
+      'Main garage doors face the side yard',
+      'Tall RV bay still readable from the street',
+      'Quieter front elevation for narrower approaches',
+      'Great room with vaulted ceiling',
     ],
-    footprintFt: { width: 104, depth: 72 },
+    footprintFt: { width: 94, depth: 78 },
   },
 ]
+
+function withPublicAssets(plan: HomePlan): HomePlan {
+  return {
+    ...plan,
+    elevationImg: assetUrl(plan.elevationImg),
+    cutoutImg: assetUrl(plan.cutoutImg),
+    floorplanImg: assetUrl(plan.floorplanImg),
+    pdfUrl: assetUrl(plan.pdfUrl),
+  }
+}
+
+export const homePlans: HomePlan[] = RAW_PLANS.map(withPublicAssets)
+
+/** Plans shown in Lot Studio’s one-click catalog (same as marketing for now). */
+export const studioPlans = homePlans
+
+export function getPlan(id: string | null | undefined): HomePlan | undefined {
+  if (!id) return undefined
+  return homePlans.find((p) => p.id === id)
+}

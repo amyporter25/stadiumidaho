@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { trpc } from '@/providers/trpc'
+import { assetUrl } from '@/lib/assetUrl'
 import { homePlans } from '../../data/plans'
 import {
   makeFrame,
@@ -12,7 +13,7 @@ import {
   FT_TO_M,
   type LocalFrame,
 } from './geo'
-import { buildHouse, houseFootprint } from './houses'
+import { houseFootprint, loadBuilderHome } from './houses'
 import { loadAerialTexture, aerialUV } from './imagery'
 
 /* ------------------------------------------------------------------ */
@@ -75,7 +76,7 @@ const VANTAGE_M = 7.5 // ~25 ft — second-story height above the street
  * rotationY turns the panorama's horizon into the lot's compass frame
  * (radians, counter-clockwise looking down — tune once per pano). */
 const SKY_WORLDS: Record<string, { url: string; rotationY: number }> = {
-  '46/3': { url: '/sky/lot46.jpg', rotationY: (-74.9 * Math.PI) / 180 },
+  '46/3': { url: assetUrl('/sky/lot46.jpg'), rotationY: (-74.9 * Math.PI) / 180 },
 }
 
 export default function LotVisualizer({ lotName, center, polygon, facing, neighbors = [] }: LotVisualizerProps) {
@@ -570,12 +571,20 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
   useEffect(() => {
     const s = sceneRef.current
     if (!s || !ready) return
+    let cancelled = false
     s.houseAnchor.clear()
-    s.houseAnchor.add(buildHouse(planId))
     // default placement: center of the buildable zone, front toward the street
     const [hx, hz] = defaultPad
     s.houseAnchor.position.set(hx, s.groundAt(hx, hz), hz)
     s.houseAnchor.rotation.y = Math.atan2(-(frontMid[0] - hx), -(frontMid[1] - hz))
+    void loadBuilderHome(planId).then(({ house }) => {
+      if (cancelled || sceneRef.current !== s) return
+      s.houseAnchor.clear()
+      s.houseAnchor.add(house)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [planId, ready, defaultPad, frontMid])
 
   /* ---- sun light from slider ---- */
@@ -739,7 +748,11 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
                     color: planId === p.id ? '#f2b04a' : 'rgba(255,255,255,0.75)', cursor: 'pointer',
                   }}
                 >
-                  {p.name}
+                  {p.id === 'whitestone-front'
+                    ? 'Whitestone · front'
+                    : p.id === 'whitestone-side'
+                      ? 'Whitestone · side'
+                      : p.name.replace(/^The /, '')}
                 </button>
               ))}
             </div>

@@ -1,0 +1,17 @@
+{
+  "name": "Stadium Idaho",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "Lot Studio",
+      "command": "npm run dev -- --host 0.0.0.0 --port 3000",
+      "description": "Vite + API on port 3000. In Cursor Desktop, open the Agents Window, select this cloud agent, then use the plug icon to forward port 3000 (manual forward if auto-detect misses this terminal)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "Lot Studio",
+      "port": 3000
+    }
+  ]
+}

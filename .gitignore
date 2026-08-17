@@ -9,7 +9,8 @@ node_modules/
 .env.local
 .env.*.local
 
-# Database
+# Database dumps at repo root only (do not ignore src/data/)
+/data/
 *.db
 *.sqlite
 *.sqlite3
@@ -32,4 +33,3 @@ coverage/
 # Large media assets
 # public/videos/  <-- required for deployment, do not ignore
 node_modules
-data/
