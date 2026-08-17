@@ -86,6 +86,11 @@ For each plan, deliver:
 
 ---
 
+## Model it in Blender (with the agent)
+
+Click-by-click Session 1: [`docs/blender-whitestone.md`](./blender-whitestone.md).  
+Setup script: `scripts/blender_whitestone_setup.py`.
+
 ## In-repo models (generated)
 
 These GLBs are built from the construction PDFs + ArchyBase elevations already in `public/plans/`:
