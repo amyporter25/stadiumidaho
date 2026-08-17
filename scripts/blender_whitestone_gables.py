@@ -132,7 +132,7 @@ def main() -> None:
     door = mat("door", (0.92, 0.90, 0.86), 0.7)
     trim = mat("trim", (0.08, 0.08, 0.08), 0.55)
     wood = mat("wood", (0.55, 0.38, 0.22), 0.6)
-    glass = mat("glass", (0.35, 0.48, 0.55), 0.12)
+    glass = mat("glass", (0.15, 0.62, 0.82), 0.12)
 
     garage_w = WIDTH_M * 0.4
     entry_w = WIDTH_M * 0.22
@@ -192,16 +192,18 @@ def main() -> None:
     add_box("post_l", Vector((0.26, 0.26, WALL_H * 0.9)), Vector((entry_x - entry_w * 0.28, STREET_Y + 0.38, WALL_H * 0.45)), wood)
     add_box("post_r", Vector((0.26, 0.26, WALL_H * 0.9)), Vector((entry_x + entry_w * 0.28, STREET_Y + 0.38, WALL_H * 0.45)), wood)
     add_box("trim_bar", Vector((entry_w * 0.62, 0.18, 0.14)), Vector((entry_x, STREET_Y + 0.5, WALL_H * 0.86)), wood)
-    add_box("front_door", Vector((1.05, 0.1, 2.15)), Vector((entry_x, STREET_Y + 0.22, 1.1)), wood)
+    add_box("front_door", Vector((1.15, 0.14, 2.25)), Vector((entry_x, STREET_Y + 0.12, 1.15)), wood)
 
     living_street_z = WALL_H * 0.55
+    # Sit the glass clearly in front of the street wall so it cannot hide inside the mesh.
+    win_y = STREET_Y - 0.12
     for i, x in enumerate((living_x - living_w * 0.28, living_x, living_x + living_w * 0.28)):
-        add_box(f"win_front_{i}", Vector((1.15, 0.08, 1.35)), Vector((x, STREET_Y + 0.06, living_street_z)), glass)
-        add_box(f"win_front_trim_{i}", Vector((1.28, 0.05, 1.48)), Vector((x, STREET_Y + 0.02, living_street_z)), trim)
-    add_box("win_gable", Vector((0.55, 0.08, 0.7)), Vector((dbl_x, STREET_Y + 0.06, WALL_H + RISE * 0.22)), glass)
-    add_box("win_side_l", Vector((0.08, 1.2, 1.2)), Vector((WIDTH_M / 2 - 0.04, 0.4, WALL_H * 0.55)), glass)
-    add_box("win_side_r", Vector((0.08, 1.2, 1.2)), Vector((-WIDTH_M / 2 + 0.04, -0.6, WALL_H * 0.55)), glass)
-    add_box("win_rear_0", Vector((1.4, 0.08, 1.5)), Vector((living_x, DEPTH_M * 0.47, WALL_H * 0.55)), glass)
+        add_box(f"win_front_{i}", Vector((1.45, 0.18, 1.55)), Vector((x, win_y, living_street_z)), glass)
+        add_box(f"win_front_trim_{i}", Vector((1.62, 0.1, 1.72)), Vector((x, win_y + 0.08, living_street_z)), trim)
+    add_box("win_gable", Vector((0.7, 0.16, 0.85)), Vector((dbl_x, win_y, WALL_H + RISE * 0.22)), glass)
+    add_box("win_side_l", Vector((0.18, 1.45, 1.45)), Vector((WIDTH_M / 2 + 0.12, 0.4, WALL_H * 0.55)), glass)
+    add_box("win_side_r", Vector((0.18, 1.45, 1.45)), Vector((-WIDTH_M / 2 - 0.12, -0.6, WALL_H * 0.55)), glass)
+    add_box("win_rear_0", Vector((1.7, 0.18, 1.7)), Vector((living_x, DEPTH_M * 0.47 + 0.12, WALL_H * 0.55)), glass)
 
     bpy.ops.object.empty_add(type="ARROWS", location=Vector(((rv_x + dbl_x) / 2, STREET_Y, 0)))
     empty = bpy.context.active_object
@@ -214,7 +216,26 @@ def main() -> None:
     sun.data.energy = 3.0
 
     bpy.ops.object.select_all(action="DESELECT")
-    print("Whitestone massing with windows. Orbit with the middle mouse.")
+    look_from_street()
+    print("WHITESTONE v3 — windows should be bright teal on the street face.")
+
+
+def look_from_street() -> None:
+    """Point the open 3D view at the street facade so the new windows are in frame."""
+    from mathutils import Euler
+
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type != "VIEW_3D":
+                continue
+            space = area.spaces.active
+            space.shading.type = "SOLID"
+            space.shading.color_type = "MATERIAL"
+            r3d = space.region_3d
+            r3d.view_perspective = "PERSP"
+            r3d.view_location = Vector((2.0, 0.0, 3.0))
+            r3d.view_distance = 42.0
+            r3d.view_rotation = Euler((1.2, 0.0, 0.0)).to_quaternion()
 
 
 if __name__ == "__main__":
