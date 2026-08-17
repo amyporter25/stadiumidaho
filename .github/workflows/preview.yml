@@ -42,6 +42,9 @@ jobs:
       - name: SPA fallback for /studio routes
         run: cp dist/public/index.html dist/public/404.html
       - uses: actions/configure-pages@v5
+        with:
+          # First-time repos have no Pages site until this is on.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/public
