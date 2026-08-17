@@ -13,7 +13,7 @@ import {
   FT_TO_M,
   type LocalFrame,
 } from './geo'
-import { buildHouse, houseFootprint } from './houses'
+import { houseFootprint, loadBuilderHome } from './houses'
 import { loadAerialTexture, aerialUV } from './imagery'
 
 /* ------------------------------------------------------------------ */
@@ -571,12 +571,20 @@ export default function LotVisualizer({ lotName, center, polygon, facing, neighb
   useEffect(() => {
     const s = sceneRef.current
     if (!s || !ready) return
+    let cancelled = false
     s.houseAnchor.clear()
-    s.houseAnchor.add(buildHouse(planId))
     // default placement: center of the buildable zone, front toward the street
     const [hx, hz] = defaultPad
     s.houseAnchor.position.set(hx, s.groundAt(hx, hz), hz)
     s.houseAnchor.rotation.y = Math.atan2(-(frontMid[0] - hx), -(frontMid[1] - hz))
+    void loadBuilderHome(planId).then(({ house }) => {
+      if (cancelled || sceneRef.current !== s) return
+      s.houseAnchor.clear()
+      s.houseAnchor.add(house)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [planId, ready, defaultPad, frontMid])
 
   /* ---- sun light from slider ---- */

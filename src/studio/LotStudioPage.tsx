@@ -30,7 +30,7 @@ function centroid(feature: StadiumLotFeature): { lat: number; lng: number } | nu
 
 /**
  * Track B — Lot Studio (lot-first).
- * Aerial + plat + textured builder plans + driveway estimate + landscaping.
+ * Aerial + plat + builder GLB + driveway estimate + landscaping.
  */
 export default function LotStudioPage() {
   const location = useLocation()
@@ -394,7 +394,7 @@ export default function LotStudioPage() {
         {loadError ? <span style={{ color: '#8b2e2e' }}>{loadError}</span> : status}
         {cutout.error && <div style={{ color: '#6b4e16', marginTop: 4 }}>{cutout.error}</div>}
         <div style={{ marginTop: 6, opacity: 0.65, fontSize: 11 }}>
-          Photoreal builder elevations · driveway · landscaping · estimates only
+          Builder home GLB · driveway · landscaping · estimates only
         </div>
       </div>
     </div>

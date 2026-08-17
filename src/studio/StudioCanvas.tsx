@@ -9,13 +9,7 @@ import {
   type LocalFrame,
 } from '../components/lotVisualizer/geo'
 import { aerialUV, loadAerialTexture } from '../components/lotVisualizer/imagery'
-import {
-  applyBuilderElevations,
-  applyFacadeTexture,
-  buildStudioHouse,
-  PLAN_ELEVATIONS,
-  updateFacadeFacing,
-} from '../components/lotVisualizer/houses'
+import { loadBuilderHome } from '../components/lotVisualizer/houses'
 import type { StadiumLotFeature } from '../components/LotMap'
 import { getPlan } from '../data/plans'
 import {
@@ -90,7 +84,8 @@ function makeAsphaltTexture(): THREE.CanvasTexture {
 }
 
 /**
- * Lot-first world: aerial + plat + textured builder home + driveway + landscaping.
+ * Lot-first world: aerial + plat + vendor GLB (or footprint placeholder) +
+ * driveway + landscaping.
  */
 export default function StudioCanvas({
   lot,
@@ -114,8 +109,9 @@ export default function StudioCanvas({
   const plantKindRef = useRef(plantKind)
   const materialRef = useRef(drivewayMaterial)
   const anchorRef = useRef<THREE.Group | null>(null)
-  /** Plan-based 3D massing + photoreal street facade (builder plans). */
+  /** Vendor GLB or footprint placeholder for the selected builder plan. */
   const massingRef = useRef<THREE.Group | null>(null)
+  const houseLoadGen = useRef(0)
   /** Flat cutout for custom uploaded photos only. */
   const cutoutRef = useRef<THREE.Mesh | null>(null)
   const approachRef = useRef<THREE.Object3D | null>(null)
@@ -249,7 +245,7 @@ export default function StudioCanvas({
     syncDrivewayRef.current()
   }
 
-  /** Builder plan → 3D footprint massing (+ optional photoreal street facade). */
+  /** Builder plan → vendor GLB, or a footprint placeholder if none is installed. */
   const loadPlanHouse = (planId: string, statusMsg: string, frameView = false) => {
     const anchor = anchorRef.current
     if (!anchor) return
@@ -262,49 +258,14 @@ export default function StudioCanvas({
     clearMassing()
     if (cutoutRef.current) cutoutRef.current.visible = false
 
-    const finishElevations = (house: THREE.Group) => {
-      const elev = PLAN_ELEVATIONS[planId]
-      if (!elev) {
-        texUrlRef.current = `massing:${planId}`
-        syncTransform()
-        if (frameView) frameHouseStreetView()
-        onStatus(statusMsg)
+    const gen = ++houseLoadGen.current
+    onStatus(`Loading ${plan.name}…`)
+
+    void loadBuilderHome(planId).then(({ house, fromGlb }) => {
+      if (gen !== houseLoadGen.current || !anchorRef.current) {
+        disposeObject3D(house)
         return
       }
-      texUrlRef.current = elev.front
-      const loader = new THREE.TextureLoader()
-      const done = () => {
-        syncTransform()
-        if (frameView) frameHouseStreetView()
-        onStatus(statusMsg)
-      }
-      loader.load(
-        elev.front,
-        (frontTex) => {
-          if (!elev.rear) {
-            applyBuilderElevations(house, frontTex, null)
-            done()
-            return
-          }
-          loader.load(
-            elev.rear,
-            (rearTex) => {
-              applyBuilderElevations(house, frontTex, rearTex)
-              done()
-            },
-            undefined,
-            () => {
-              applyBuilderElevations(house, frontTex, null)
-              done()
-            }
-          )
-        },
-        undefined,
-        () => done()
-      )
-    }
-
-    const seatHouse = (house: THREE.Group) => {
       house.visible = true
       house.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
@@ -312,44 +273,18 @@ export default function StudioCanvas({
           o.receiveShadow = true
         }
       })
-      anchor.add(house)
+      anchorRef.current.add(house)
       massingRef.current = house
-      anchor.visible = true
-      finishElevations(house)
-    }
-
-    const house = buildStudioHouse(planId)
-    if (PLAN_ELEVATIONS[planId]) {
-      seatHouse(house)
-      return
-    }
-
-    house.visible = true
-    anchor.add(house)
-    massingRef.current = house
-    anchor.visible = true
-
-    const facade = house.getObjectByName('streetFacade') as THREE.Mesh | undefined
-    if (!facade || !plan.cutoutImg) {
-      texUrlRef.current = `massing:${planId}`
+      anchorRef.current.visible = true
+      texUrlRef.current = fromGlb ? `glb:${planId}` : `placeholder:${planId}`
       syncTransform()
       if (frameView) frameHouseStreetView()
-      onStatus(statusMsg)
-      return
-    }
-
-    texUrlRef.current = plan.cutoutImg
-    new THREE.TextureLoader().load(
-      plan.cutoutImg,
-      (tex) => {
-        applyFacadeTexture(house, tex)
-        syncTransform()
-        if (frameView) frameHouseStreetView()
-        onStatus(statusMsg)
-      },
-      undefined,
-      () => onLoadError('Could not load the house elevation.')
-    )
+      onStatus(
+        fromGlb
+          ? statusMsg
+          : `${plan.name} — footprint on the lot (builder GLB not installed yet). Orbit; drag to move.`
+      )
+    })
   }
 
   /** Custom uploaded photo → flat cutout billboard (best-effort). */
@@ -416,7 +351,7 @@ export default function StudioCanvas({
     onLandscapeCostChange(0, 0)
   }, [landscapeRevision, onLandscapeCostChange])
 
-  // Builder plan → 3D footprint massing + photoreal street facade
+  // Builder plan → vendor GLB (or footprint placeholder)
   useEffect(() => {
     const anchor = anchorRef.current
     if (!anchor) return
@@ -424,6 +359,7 @@ export default function StudioCanvas({
     planIdRef.current = planId
 
     if (!planId) {
+      houseLoadGen.current += 1
       if (!houseImageUrl) {
         clearMassing()
         if (cutoutRef.current) cutoutRef.current.visible = false
@@ -437,8 +373,8 @@ export default function StudioCanvas({
     }
 
     const plan = getPlan(planId)
-    if (!plan?.cutoutImg) {
-      onLoadError('This plan is missing a house image.')
+    if (!plan) {
+      onLoadError('Unknown builder plan.')
       return
     }
 
@@ -1000,11 +936,6 @@ export default function StudioCanvas({
     const tick = () => {
       if (disposed) return
       controls.update()
-      // Photoreal facade faces the street; hide it when orbiting so the plan
-      // massing reads as solid 3D instead of a floating photo card.
-      if (massingRef.current?.visible) {
-        updateFacadeFacing(massingRef.current, camera)
-      }
       renderer!.render(scene, camera)
       raf = requestAnimationFrame(tick)
     }
@@ -1052,6 +983,8 @@ export default function StudioCanvas({
       if (renderer?.domElement.parentElement === mount) {
         mount.removeChild(renderer.domElement)
       }
+      houseLoadGen.current += 1
+      massingRef.current = null
       anchorRef.current = null
       cutoutRef.current = null
       approachRef.current = null

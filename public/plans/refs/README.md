@@ -1,17 +1,13 @@
-# Exterior reference images (photoreal skins)
+# Exterior reference images
 
-Lot Studio wraps these onto the Whitestone 3D massing (`streetFacade` /
-`rearFacade` planes).
+These are **reference stills for a 3D modeler**, not runtime house skins.
+Lot Studio does not wrap them onto boxes.
 
 ## Whitestone
 
 | File | Role |
 |------|------|
-| `whitestone-front.png` | Street elevation cutout (RV + garage on the **left**) |
-| `whitestone-rear.png` | Rear elevation cutout (large glass gable) |
-| `whitestone-exteriors.png` | Source ArchyBase front+rear stack (for re-cuts) |
+| `whitestone-front.png` | Street elevation (RV + garage on the **left**) |
+| `whitestone-rear.png` | Rear elevation (large glass gable) |
+| `whitestone-exteriors.png` | Source ArchyBase front+rear stack |
 | `whitestone-dollhouse.jpg` | Isometric floor-plan dollhouse reference |
-
-Skins are transparent PNGs (background removed). After replacing files, bump the
-`?v=` cache query on `WHITESTONE_*_SKIN` in `whitestoneHouse.ts`, then
-hard-refresh `/studio` and select **The Whitestone**.

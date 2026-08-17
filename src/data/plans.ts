@@ -10,8 +10,8 @@ export interface HomePlan {
   /** Photoreal marketing elevation (picker cards + reference) */
   elevationImg: string
   /**
-   * Transparent photoreal cutout placed on the lot in Studio.
-   * This is the buyer-facing house visual — not a procedural box massing.
+   * Marketing cutout for picker cards and the custom photo-upload path.
+   * The 3D house on the lot comes from a vendor GLB, not this image.
    */
   cutoutImg: string
   floorplanImg: string
@@ -84,7 +84,6 @@ const RAW_PLANS: HomePlan[] = [
     garageEntry: 'front',
     // Street-left garage wing (matches builder front elevation / ArchyBase refs)
     garageXFrac: -0.28,
-    // Photoreal wraps: public/plans/refs/whitestone-front.png (+ rear)
     porches: ['Covered front porch', 'Covered rear porch'],
     highlights: [
       'Modern farmhouse elevation with timber-truss entry',

@@ -13,19 +13,15 @@ Default experience:
 1. Pick a lot from the plat (`?lot=46/3`, etc.)
 2. See **real aerial photography** of that homesite
 3. See the **lot boundary** (and neighbors) from the plat GeoJSON
-4. **Drop a builder plan** (primary) — Brownstone or Whitestone — as a **3D
-   massing from the plan footprint**. Whitestone uses a dedicated exterior
-   (RV + two-car on the street-left, timber entry, rear glass gable). Brownstone
-   still uses a photoreal street facade on the massing when available.
-5. **Driveway** auto-simulates from the street front to the garage apron, with
-   a ballpark concrete/asphalt cost that updates as you move the house
+4. **Drop a builder plan** — Brownstone or Whitestone — as a **vendor GLB**
+   (or a footprint placeholder until that file is installed)
+5. **Driveway** auto-simulates from the street front to the garage apron
+   (`GarageDoorFront` / `GarageDoorSide`), with a ballpark concrete/asphalt cost
 6. **Landscaping** mode places trees, evergreens, shrubs, and lawn patches
-   (also tallied as a rough extras estimate)
 7. Or **upload a house photo** → background cutout → place/scale/rotate in feet
 
-Cutouts live in `public/plans/cutouts/`. Massings: `src/components/lotVisualizer/houses.ts`.
-Do **not** drape PDF line-art elevations onto boxes — use the photoreal render
-on the front face only.
+Do **not** stamp elevations onto boxes or rebuild the house in-engine.
+Drop modeled files in `public/plans/glb/`. Brief: `docs/builder-home-glb-brief.md`.
 
 ## Builder plans
 
@@ -37,7 +33,7 @@ Construction PDFs live in `public/plans/`:
 | Whitestone · front | `whitestone-7-2-rwr.pdf` | Front-facing garage + RV bay → driveway to street face |
 | Whitestone · side | `whitestone-29-3-pse.pdf` | Side-entry two-car + front RV → driveway to side doors |
 
-Catalog + footprints: `src/data/plans.ts`. Whitestone massings: `whitestoneHouse.ts` (front/side entry).
+Catalog + footprints: `src/data/plans.ts`. Loader: `src/components/lotVisualizer/builderHomes.ts`.
 
 ## Optional splat experiment
 
@@ -56,5 +52,5 @@ Asset on disk (unused by default): `public/splats/stadium-3d-two.splat`
 ## Why this pivot
 
 Buyers need to recognize *their lot* and try a house on it. A floating
-reconstruction blob fails that test. Aerial + plat + builder plans (or photo
-cutout) passes it, then we can layer ground pans / better 3D later per lot.
+reconstruction blob fails that test. Aerial + plat + a real builder GLB
+(or photo cutout) passes it.

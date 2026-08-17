@@ -53,7 +53,9 @@ Local axes of those empties should match the house (no random rotation). Ground 
 - Match the **marketing / ArchyBase exterior** as closely as practical: board-and-batten (Whitestone), roof forms, timber entry, window rhythm, garage/RV proportions.  
 - Garage wing must be on the **correct side** per plan (Whitestone: street-view **left**).  
 - Interior detail is **not** required.  
-- Photoreal texturing is nice-to-have; accurate massing + credible materials is the bar.  
+- Model the exterior from the elevations and floor plans. Do **not** extrude a
+  box, stamp photos on walls, or generate a scripted massing. The house must
+  still look like the marketed home when the camera orbits.  
 
 ---
 
@@ -83,23 +85,8 @@ For each plan, deliver:
 - Rigged doors / animation  
 - Landscaping, people, cars  
 - Ultra-high-poly archviz still renders (we need real-time web)  
+- In-engine / scripted massing, photo-on-box skins, or Blender setup scripts from this repo  
 
----
-
-## Model it in Blender (with the agent)
-
-Click-by-click Session 1: [`docs/blender-whitestone.md`](./blender-whitestone.md).  
-Setup script: `scripts/blender_whitestone_setup.py`.
-
-## In-repo models (generated)
-
-These GLBs are built from the construction PDFs + ArchyBase elevations already in `public/plans/`:
-
-```
-npm run glb:export
-```
-
-Outputs: `public/plans/glb/whitestone-front.glb`, `whitestone-side.glb`, `brownstone.glb`.
-
-Lot Studio loads those GLBs, then stamps the photoreal front/rear elevations onto the **wall faces** (not a floating photo card). Driveway attach uses `GarageDoorFront` / `GarageDoorSide`.
+Install each delivered file as `public/plans/glb/<plan-id>.glb`. Lot Studio
+loads that GLB as-is and aims the driveway at `GarageDoorFront` / `GarageDoorSide`.
 

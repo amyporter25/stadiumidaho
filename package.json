@@ -13,7 +13,6 @@
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
-    "glb:export": "npx --yes tsx scripts/export-plan-glbs.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"
