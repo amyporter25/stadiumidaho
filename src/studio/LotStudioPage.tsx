@@ -233,15 +233,15 @@ export default function LotStudioPage() {
                 }}
               >
                 <img
-                  src={plan.cutoutImg}
+                  src={plan.elevationImg}
                   alt=""
                   style={{
                     width: '100%',
-                    height: 88,
-                    objectFit: 'contain',
-                    objectPosition: 'center bottom',
+                    height: 108,
+                    objectFit: 'cover',
+                    objectPosition: 'center 58%',
                     display: 'block',
-                    background: 'linear-gradient(180deg, #d7e6f5 0%, #e8e4dc 100%)',
+                    background: '#d5e0ea',
                   }}
                 />
                 <div style={{ padding: '8px 10px', textAlign: 'left' }}>

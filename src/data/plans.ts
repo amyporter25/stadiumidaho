@@ -7,7 +7,7 @@ export interface HomePlan {
   name: string
   subtitle: string
   builder: string
-  /** Photoreal marketing elevation (picker cards + reference) */
+  /** Picker / catalog card (full-scene marketing still, not a cutout) */
   elevationImg: string
   /**
    * Marketing cutout for picker cards and the custom photo-upload path.
@@ -46,7 +46,7 @@ const RAW_PLANS: HomePlan[] = [
     name: 'The Brownstone',
     subtitle: 'Front-facing garage + RV bay',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/brownstone-elevation.jpg?v=drive10',
+    elevationImg: '/plans/cards/brownstone.jpg?v=cards1',
     cutoutImg: '/plans/cutouts/brownstone.png?v=drive10',
     floorplanImg: '/plans/thumbs/brownstone-floorplan.jpg',
     pdfUrl: '/plans/brownstone-15-2-rwr.pdf',
@@ -73,7 +73,7 @@ const RAW_PLANS: HomePlan[] = [
     name: 'The Whitestone',
     subtitle: 'Front-facing garage + RV (left)',
     builder: 'Blackstone Homes',
-    elevationImg: '/plans/whitestone-elevation.jpg?v=drive10',
+    elevationImg: '/plans/cards/whitestone-front.jpg?v=cards1',
     cutoutImg: '/plans/cutouts/whitestone.png?v=drive10',
     floorplanImg: '/plans/thumbs/whitestone-front-floorplan.jpg',
     pdfUrl: '/plans/whitestone-7-2-rwr.pdf',
@@ -101,7 +101,7 @@ const RAW_PLANS: HomePlan[] = [
     builder: 'Blackstone Homes',
     // Side-entry plan uses the same Whitestone marketing render until a
     // dedicated side-entry exterior photo is supplied.
-    elevationImg: '/plans/whitestone-elevation.jpg?v=drive10',
+    elevationImg: '/plans/cards/whitestone-side.jpg?v=cards1',
     cutoutImg: '/plans/cutouts/whitestone.png?v=drive10',
     floorplanImg: '/plans/thumbs/whitestone-side-floorplan.jpg',
     pdfUrl: '/plans/whitestone-29-3-pse.pdf',

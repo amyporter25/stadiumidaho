@@ -13,3 +13,5 @@ Units: meters. Origin: footprint center at ground. Street facade faces **−Z**.
 
 See `docs/builder-home-glb-brief.md`. Until a file is present, Studio seats a
 plain footprint box so the lot and driveway still work.
+
+Do not commit in-engine / `THREE.GLTFExporter` massings here.
