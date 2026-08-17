@@ -14,8 +14,19 @@ script loads images from `public/plans/`.
 
 1. Install Blender. Open it once and quit the splash screen (click anywhere).
 2. **File → Open** is not needed yet. Switch the top tab to **Scripting**.
-3. **Text → Open** → `scripts/blender_whitestone_setup.py` in this repo.
+3. **Text → Open** and pick the file *inside your clone*, not a copy:
+   `/Users/YOU/stadiumidaho/scripts/blender_whitestone_setup.py`
 4. Click **Run Script**.
+
+   If Blender still errors, pull the latest script first (Terminal):
+
+   ```bash
+   cd ~/stadiumidaho
+   git checkout cursor/lot-studio-track-b-3c2b
+   git pull origin cursor/lot-studio-track-b-3c2b
+   ```
+
+   Then in Blender: Text → Open that same path again (so you are not running an old copy).
 5. Switch back to the **Layout** tab.
 
 You should see:

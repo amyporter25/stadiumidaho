@@ -28,12 +28,56 @@ GARAGE_H = 4.35
 STREET_Y = -DEPTH_M / 2
 
 
+def _looks_like_repo(path: Path) -> bool:
+    return (path / "public/plans/refs/whitestone-front.png").exists()
+
+
 def repo_root() -> Path:
-    if "__file__" in globals():
-        return Path(__file__).resolve().parents[1]
-    # Pasted into Blender's text editor — look next to the .blend, then cwd.
-    blend = Path(bpy.data.filepath) if bpy.data.filepath else Path.cwd()
-    return blend.parent if blend.suffix == ".blend" else Path.cwd()
+    """Find the stadiumidaho folder. Blender's text editor sets __file__ to
+    /blender_whitestone_setup.py (filesystem root), which is not the repo."""
+    candidates: list[Path] = []
+
+    for text in bpy.data.texts:
+        if text.filepath:
+            p = Path(bpy.path.abspath(text.filepath)).expanduser().resolve()
+            if p.parent.name == "scripts":
+                candidates.append(p.parent.parent)
+            candidates.append(p.parent)
+
+    if bpy.data.filepath:
+        candidates.append(Path(bpy.data.filepath).resolve().parent)
+
+    home = Path.home()
+    candidates.extend(
+        [
+            home / "stadiumidaho",
+            home / "Documents" / "stadiumidaho",
+            home / "Desktop" / "stadiumidaho",
+            Path.cwd(),
+            Path.cwd().parent,
+        ]
+    )
+
+    seen: set[Path] = set()
+    for c in candidates:
+        try:
+            c = c.resolve()
+        except OSError:
+            continue
+        if c in seen:
+            continue
+        seen.add(c)
+        if _looks_like_repo(c):
+            print(f"Using repo: {c}")
+            return c
+
+    searched = "\n  ".join(str(p) for p in seen) or "(none)"
+    raise FileNotFoundError(
+        "Could not find stadiumidaho on this Mac.\n"
+        "In Blender use Text → Open and pick:\n"
+        "  /Users/YOU/stadiumidaho/scripts/blender_whitestone_setup.py\n"
+        "Looked in:\n  " + searched
+    )
 
 
 def clear_scene() -> None:
