@@ -29,7 +29,20 @@ on the street-left, and a small porch — **no flat photo standing in the air**.
 Orbit with the middle mouse. This is still a massing (no photoreal siding yet).
 If the roofs look like a house when you spin it, we did the right step.
 
+## Session 3 — windows and entry (same script, updated)
+
+```bash
+cd ~/stadiumidaho
+git pull origin cursor/lot-studio-track-b-3c2b
+/Applications/Blender.app/Contents/MacOS/Blender --python ~/stadiumidaho/scripts/blender_whitestone_gables.py
+```
+
+You should see glass on the street face, a wood front door, and windows on the
+sides/rear so orbit is not blank walls.
+
 **Save:** File → Save As → `whitestone-front.blend`
+
+Next after that: export a `.glb` into `public/plans/glb/` so Lot Studio can load it.
 
 ---
 

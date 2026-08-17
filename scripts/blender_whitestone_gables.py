@@ -132,6 +132,7 @@ def main() -> None:
     door = mat("door", (0.92, 0.90, 0.86), 0.7)
     trim = mat("trim", (0.08, 0.08, 0.08), 0.55)
     wood = mat("wood", (0.55, 0.38, 0.22), 0.6)
+    glass = mat("glass", (0.35, 0.48, 0.55), 0.12)
 
     garage_w = WIDTH_M * 0.4
     entry_w = WIDTH_M * 0.22
@@ -191,6 +192,16 @@ def main() -> None:
     add_box("post_l", Vector((0.26, 0.26, WALL_H * 0.9)), Vector((entry_x - entry_w * 0.28, STREET_Y + 0.38, WALL_H * 0.45)), wood)
     add_box("post_r", Vector((0.26, 0.26, WALL_H * 0.9)), Vector((entry_x + entry_w * 0.28, STREET_Y + 0.38, WALL_H * 0.45)), wood)
     add_box("trim_bar", Vector((entry_w * 0.62, 0.18, 0.14)), Vector((entry_x, STREET_Y + 0.5, WALL_H * 0.86)), wood)
+    add_box("front_door", Vector((1.05, 0.1, 2.15)), Vector((entry_x, STREET_Y + 0.22, 1.1)), wood)
+
+    living_street_z = WALL_H * 0.55
+    for i, x in enumerate((living_x - living_w * 0.28, living_x, living_x + living_w * 0.28)):
+        add_box(f"win_front_{i}", Vector((1.15, 0.08, 1.35)), Vector((x, STREET_Y + 0.06, living_street_z)), glass)
+        add_box(f"win_front_trim_{i}", Vector((1.28, 0.05, 1.48)), Vector((x, STREET_Y + 0.02, living_street_z)), trim)
+    add_box("win_gable", Vector((0.55, 0.08, 0.7)), Vector((dbl_x, STREET_Y + 0.06, WALL_H + RISE * 0.22)), glass)
+    add_box("win_side_l", Vector((0.08, 1.2, 1.2)), Vector((WIDTH_M / 2 - 0.04, 0.4, WALL_H * 0.55)), glass)
+    add_box("win_side_r", Vector((0.08, 1.2, 1.2)), Vector((-WIDTH_M / 2 + 0.04, -0.6, WALL_H * 0.55)), glass)
+    add_box("win_rear_0", Vector((1.4, 0.08, 1.5)), Vector((living_x, DEPTH_M * 0.47, WALL_H * 0.55)), glass)
 
     bpy.ops.object.empty_add(type="ARROWS", location=Vector(((rv_x + dbl_x) / 2, STREET_Y, 0)))
     empty = bpy.context.active_object
@@ -203,8 +214,7 @@ def main() -> None:
     sun.data.energy = 3.0
 
     bpy.ops.object.select_all(action="DESELECT")
-    print("Session 2: gabled Whitestone, no standing photo.")
-    print("Orbit with the middle mouse. Material Preview (Z) still helps.")
+    print("Whitestone massing with windows. Orbit with the middle mouse.")
 
 
 if __name__ == "__main__":
